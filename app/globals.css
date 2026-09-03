@@ -20,8 +20,8 @@
   --color-signal-foreground: var(--signal-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-subtle: var(--destructive-subtle);
-  --font-sans: "Instrument Sans Variable", "Aptos", sans-serif;
-  --font-mono: "IBM Plex Mono", "Cascadia Mono", monospace;
+  --font-sans: var(--font-instrument-sans), "Aptos", sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), "Cascadia Mono", monospace;
 }
 
 :root {

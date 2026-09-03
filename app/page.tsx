@@ -1,3 +1,4 @@
+import { Show, SignInButton, UserButton } from "@clerk/nextjs";
 import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,18 @@ export default function Home() {
         >
           Relay
         </a>
+        <div className="flex min-h-9 items-center justify-end">
+          <Show when="signed-out">
+            <SignInButton>
+              <Button className="h-9" variant="default">
+                Sign in
+              </Button>
+            </SignInButton>
+          </Show>
+          <Show when="signed-in">
+            <UserButton />
+          </Show>
+        </div>
       </header>
 
       <main id="main">
