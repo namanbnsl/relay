@@ -1,5 +1,6 @@
 import { Show, SignInButton, UserButton } from "@clerk/nextjs";
 import { ArrowRight } from "lucide-react";
+import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 
@@ -33,7 +34,12 @@ export default function Home() {
             </SignInButton>
           </Show>
           <Show when="signed-in">
-            <UserButton />
+            <div className="flex items-center gap-3">
+              <Button className="h-9" variant="ghost" asChild>
+                <Link href="/secret">Secret page</Link>
+              </Button>
+              <UserButton />
+            </div>
           </Show>
         </div>
       </header>
