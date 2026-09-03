@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Instrument_Sans } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
+
+import { ConvexClientProvider } from "@/components/convex-client-provider";
+
 import "./globals.css";
 
 const instrumentSans = Instrument_Sans({
@@ -29,7 +32,9 @@ export default function RootLayout({
       className={`${instrumentSans.variable} ${ibmPlexMono.variable}`}
     >
       <body>
-        <ClerkProvider>{children}</ClerkProvider>
+        <ClerkProvider>
+          <ConvexClientProvider>{children}</ConvexClientProvider>
+        </ClerkProvider>
       </body>
     </html>
   );
