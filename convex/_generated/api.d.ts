@@ -9,8 +9,6 @@
  */
 
 import type * as model_auth from "../model/auth.js";
-import type * as secrets from "../secrets.js";
-import type * as seed from "../seed.js";
 import type * as users from "../users.js";
 
 import type {
@@ -21,8 +19,6 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "model/auth": typeof model_auth;
-  secrets: typeof secrets;
-  seed: typeof seed;
   users: typeof users;
 }>;
 

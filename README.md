@@ -2,7 +2,7 @@
 
 Relay is a Bun-powered Next.js workspace for evidence-backed video production.
 
-It uses Clerk for web sessions and OAuth-protected MCP access. Convex provides the first authenticated data flow at `/secret`. The Streamable HTTP MCP server is mounted at `/mcp` and exposes one sample tool named `hello`; no research workflow is implemented yet.
+It uses Clerk for web sessions and OAuth-protected MCP access. Authenticated users enter the UI through `/projects`; the research workspace is currently interface-only and does not persist project data. The Streamable HTTP MCP server is mounted at `/mcp` and still exposes only the sample `hello` tool.
 
 ## Clerk setup
 
@@ -23,13 +23,7 @@ The MCP endpoint independently requires a Clerk OAuth access token with the `ope
    bunx convex env set CLERK_JWT_ISSUER_DOMAIN https://your-instance.clerk.accounts.dev
    ```
 
-4. Keep `bun run convex:dev` running while developing, then seed the starter records in another terminal:
-
-   ```bash
-   bun run convex:seed
-   ```
-
-Open `http://localhost:3000/secret` after signing in. The route redirects signed-out visitors, and `convex/secrets.ts` independently rejects calls without a server-verified Clerk identity. The seed mutation is internal and safe to rerun; existing fixtures are updated rather than duplicated.
+4. Keep `bun run convex:dev` running while developing against Convex. The current project UI does not read or write project data yet.
 
 ## Run locally
 
@@ -38,7 +32,7 @@ bun install
 bun run dev
 ```
 
-Open `http://localhost:3000` for the shadcn-backed design-system preview, or `http://localhost:3000/DESIGN_SYSTEM.html` for the standalone HTML reference.
+Open `http://localhost:3000` for the public introduction. Signed-in users can open `http://localhost:3000/projects` for the project and research-workspace UI. The standalone design reference remains at `http://localhost:3000/DESIGN_SYSTEM.html`.
 
 ## Verify
 

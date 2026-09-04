@@ -1,349 +1,289 @@
 ---
-version: "alpha"
-name: Relay Production Chain
-description: "A light production workspace for moving evidence-backed video from research through approval, rendering, and publication."
+version: "beta"
+name: Relay
+description: "A calm, evidence-first workspace for research and content production."
 implementation:
+  framework: "Next.js App Router"
   styling: "Tailwind CSS v4 utilities"
-  primitives: "shadcn/ui"
-  globalCss: "Semantic tokens, base typography, accessibility defaults, and scrollbar styling only"
+  primitives: "shadcn/ui and Radix"
+  globalCss: "Semantic tokens, typography defaults, selection, scrollbar, and reduced-motion behavior only"
 colors:
-  primary: "#20221D"
-  on-primary: "#FCFCF7"
-  canvas: "#F1F2E9"
-  surface: "#FCFCF7"
-  surface-subtle: "#E7E9DE"
-  text-secondary: "#62665B"
-  border: "#CED1C4"
-  border-strong: "#999E8E"
-  accent: "#DDF45B"
-  accent-subtle: "#F2F8C9"
-  focus: "#56660A"
-  danger: "#A64035"
-  danger-subtle: "#F4DFD9"
-  success: "#256248"
+  ink: "#20221D"
+  canvas: "#FFFFFF"
+  surface: "#FFFFFF"
+  sidebar: "rgb(32 34 29 / 0.025)"
+  surface-subtle: "rgb(32 34 29 / 0.035)"
+  hover: "rgb(32 34 29 / 0.05)"
+  selected: "rgb(32 34 29 / 0.06)"
+  text-secondary: "rgb(32 34 29 / 0.62)"
+  border: "rgb(32 34 29 / 0.12)"
+  border-strong: "rgb(32 34 29 / 0.22)"
+  focus: "#20221D"
 typography:
-  display:
-    fontFamily: "Instrument Sans, Aptos, sans-serif"
-    fontSize: 2.75rem
-    fontWeight: 600
-    lineHeight: 1
-    letterSpacing: -0.05em
-  heading-lg:
-    fontFamily: "Instrument Sans, Aptos, sans-serif"
-    fontSize: 1.5rem
-    fontWeight: 600
-    lineHeight: 1.2
-    letterSpacing: -0.035em
-  heading-sm:
-    fontFamily: "Instrument Sans, Aptos, sans-serif"
-    fontSize: 0.875rem
-    fontWeight: 600
-    lineHeight: 1.3
-    letterSpacing: -0.018em
-  body:
-    fontFamily: "Instrument Sans, Aptos, sans-serif"
-    fontSize: 0.875rem
-    fontWeight: 400
-    lineHeight: 1.5
-    letterSpacing: -0.012em
-  label:
-    fontFamily: "Instrument Sans, Aptos, sans-serif"
-    fontSize: 0.75rem
-    fontWeight: 600
-    lineHeight: 1.35
-    letterSpacing: -0.008em
-  caption:
-    fontFamily: "Instrument Sans, Aptos, sans-serif"
-    fontSize: 0.75rem
-    fontWeight: 400
-    lineHeight: 1.4
-    letterSpacing: -0.006em
-  mono:
-    fontFamily: "IBM Plex Mono, Cascadia Mono, monospace"
-    fontSize: 0.75rem
-    fontWeight: 400
-    lineHeight: 1.45
-    letterSpacing: -0.01em
-rounded:
-  xs: 4px
-  sm: 6px
-  md: 10px
-  lg: 14px
-  full: 999px
+  family: "Instrument Sans, Aptos, sans-serif"
+  technical: "IBM Plex Mono, Cascadia Mono, monospace"
+  page-title: "24px / 1.2 / 600 / -0.035em"
+  section-title: "14px / 1.3 / 600"
+  body: "14px / 1.5 / 400"
+  navigation: "13px / 1.35 / 500"
+  caption: "12px / 1.4 / 400"
+shape:
+  control: "8px"
+  navigation: "6px"
+  panel: "10px"
+  focus-ring: "2px"
 spacing:
-  1: 4px
-  2: 8px
-  3: 12px
-  4: 16px
-  5: 20px
-  6: 24px
-  8: 32px
-  10: 40px
-  12: 48px
-  16: 64px
-components:
-  app-shell:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.primary}"
-  panel:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.primary}"
-    rounded: "{rounded.lg}"
-    padding: "{spacing.5}"
-  panel-subtle:
-    backgroundColor: "{colors.surface-subtle}"
-    textColor: "{colors.text-secondary}"
-    rounded: "{rounded.md}"
-    padding: "{spacing.4}"
-  button-primary:
-    backgroundColor: "{colors.primary}"
-    textColor: "#FFFFFF"
-    borderColor: "{colors.primary}"
-    typography: "{typography.heading-sm}"
-    rounded: "{rounded.md}"
-    padding: "0 14px"
-    height: "36px"
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.16), 0 2px 0 #090A08"
-    transition: "200ms cubic-bezier(0.22, 1, 0.36, 1)"
-  button-primary-hover:
-    backgroundColor: "#35382F"
-    textColor: "#FFFFFF"
-    borderColor: "#35382F"
-    transform: "translateY(-1px)"
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.16), 0 3px 0 #090A08"
-  button-secondary:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.primary}"
-    borderColor: "{colors.border-strong}"
-    typography: "{typography.heading-sm}"
-    rounded: "{rounded.md}"
-    padding: "0 14px"
-    height: "36px"
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75), 0 1px 0 rgba(32,34,29,0.06)"
-  button-accent:
-    backgroundColor: "{colors.accent}"
-    textColor: "{colors.primary}"
-    borderColor: "{colors.primary}"
-    typography: "{typography.heading-sm}"
-    rounded: "{rounded.md}"
-    padding: "0 14px"
-    height: "36px"
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.55), 0 2px 0 {colors.primary}"
-  text-selection:
-    backgroundColor: "{colors.accent}"
-    textColor: "{colors.primary}"
-  input:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.primary}"
-    typography: "{typography.body}"
-    rounded: "{rounded.md}"
-    padding: "10px 12px"
-    height: "40px"
-  focus-ring:
-    backgroundColor: "{colors.accent-subtle}"
-    textColor: "{colors.focus}"
-    rounded: "{rounded.md}"
-  destructive-action:
-    backgroundColor: "{colors.danger-subtle}"
-    textColor: "{colors.danger}"
-    typography: "{typography.heading-sm}"
-    rounded: "{rounded.sm}"
-    padding: "8px 12px"
-  success-status:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.success}"
-    typography: "{typography.label}"
-    rounded: "{rounded.xs}"
-    padding: "0"
-  divider:
-    backgroundColor: "{colors.border}"
-    textColor: "{colors.primary}"
-    height: "1px"
-  selection-boundary:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.primary}"
-    rounded: "{rounded.md}"
-    width: "2px"
-  keycap:
-    backgroundColor: "{colors.surface-subtle}"
-    textColor: "{colors.text-secondary}"
-    typography: "{typography.mono}"
-    rounded: "{rounded.xs}"
-    padding: "2px 5px"
-  metadata:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.text-secondary}"
-    typography: "{typography.caption}"
-    rounded: "{rounded.xs}"
-    padding: "2px 6px"
-  tooltip:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.on-primary}"
-    typography: "{typography.caption}"
-    rounded: "{rounded.sm}"
-    padding: "6px 8px"
-  heading:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.primary}"
-    typography: "{typography.heading-lg}"
-  display-copy:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.primary}"
-    typography: "{typography.display}"
-  border-preview:
-    backgroundColor: "{colors.border-strong}"
-    textColor: "{colors.primary}"
-    rounded: "{rounded.xs}"
+  base: "4px"
+  control-gap: "8px"
+  group-gap: "12px"
+  section-gap: "24px"
+  page-gap: "32px"
+layout:
+  content-width: "1120px"
+  reading-column: "680px max"
+  context-column: "260px"
+  sidebar-width: "240px"
+  sidebar-mobile-width: "272px"
+motion:
+  interactive: "150ms cubic-bezier(0.2, 0, 0, 1)"
+  overlay: "200ms cubic-bezier(0.2, 0, 0, 1)"
 ---
 
-## Overview
+# Relay interface system
 
-Relay should feel like a well-made production tool that keeps every handoff legible. Research, content, generated media, review decisions, and publishing records remain connected without turning the workspace into a generic dashboard.
+Relay is a restrained professional tool. It should feel closer to Linear or Notion than a marketing dashboard: compact navigation, clear writing, quiet surfaces, and enough space to understand the current task. The interface earns hierarchy through alignment, typography, and proximity—not decoration.
 
-`public/DESIGN_SYSTEM.html` remains the visual source for Relay's palette, typography, grid, and control construction. This document is the current normative specification. The reference's decorative hero highlighter is deprecated and must not be carried into product or marketing screens.
+This file is the normative visual specification. When an older reference conflicts with it, follow this file and the current semantic tokens in `app/globals.css`.
 
-The visual language comes directly from the reference system: mineral paper, carbon ink, and chalk surfaces. Citron marks the current workflow focus, selection, or one preferred action. It is never decorative emphasis. Most screens remain nearly monochrome.
+## Direction
 
-Trust is part of the interface. Every approval names an exact artifact version and content hash. Any revision invalidates the prior approval. Costly generation and public publishing name their consequence and require explicit confirmation.
+- Use one hue: Ink `#20221D`.
+- Use white as the canvas and surface.
+- Derive muted text, borders, hover fills, selected fills, and overlays from Ink with opacity.
+- Keep product screens compact and left-aligned.
+- Prefer a list, document, or artifact view over a dashboard grid.
+- Delete copy, borders, icons, and containers that do not improve comprehension.
+- Keep one filled primary action per view.
 
-## Colors
+Relay does not use gradients, glow, colored accents, decorative textures, glass effects, oversized cards, badge rows, or ambient motion.
 
-The canvas has a muted mineral-green cast rather than beige or neutral gray. The surface is a soft chalk white. Carbon ink carries the hierarchy. Citron is a functional signal for the one thing that is selected or ready to advance.
+## Taste and decision-making
 
-- Use `primary` for headings, body text, and the strongest local controls.
-- Use `accent` for quiet selected backgrounds.
-- Use bright citron for workflow focus and one preferred action.
-- The landing page may use citron for its single preferred call to action.
-- Native text selection uses citron with carbon text.
-- Use `focus` for keyboard rings. Citron is too light to form an accessible outline.
-- Use `danger` only for destructive actions, failed jobs, and irreversible consequences.
-- Use `success` for completed approvals, renders, or publication. Pair color with exact text.
-- Prefer `border` for dividers. Use `border-strong` for interactive boundaries.
+Relay's taste is quiet, exact, and work-oriented. The product should feel composed after hours of use, not merely impressive for the first screenshot. Take inspiration from Linear's disciplined density and Notion's document calm without copying either product's chrome.
 
-Large reading surfaces use `canvas`. Small interactive surfaces use `surface`. Do not stack multiple white panels merely to create hierarchy.
+When several treatments are valid, choose in this order:
+
+1. Remove the element if it repeats information or carries no action.
+2. Use alignment and space to establish the relationship.
+3. Use a low-opacity Ink fill when a bounded interactive region needs to be discoverable.
+4. Add a border only when the boundary would otherwise be ambiguous.
+5. Add an icon only when it improves recognition or names an action more quickly than text.
+
+The interface should look intentional without looking styled. A screen is successful when the task, current context, and next action are obvious at a glance and no element asks for attention without earning it.
+
+### What feels right
+
+- Compact navigation beside a generous reading canvas.
+- One strong title, one quiet description, and one concise metadata line.
+- Rows that reveal interactivity through a subtle hover fill.
+- Contextual information grouped into one quiet surface.
+- Familiar icons with consistent size and stroke.
+- Immediate feedback that settles quickly and can be interrupted.
+- Empty space that separates decisions rather than filling the screen.
+
+### What feels wrong
+
+- Dashboard card grids for linear work.
+- A border around every group or a divider between every row.
+- Repeating the same project, topic, or status in nearby regions.
+- Eyebrows, badges, counters, and helper copy competing with the title.
+- Large headings inside the authenticated product.
+- Floating panels, dramatic shadows, glass, gradients, or colored glow.
+- Tiny controls placed loosely instead of aligned to their owning row.
+- Motion whose only purpose is to make the interface feel animated.
+
+## Color roles
+
+Ink carries every foreground and interactive role. A new hue needs a functional requirement that Ink and text cannot express; it must not be added for decoration.
+
+- `background` and `card` are white.
+- `foreground`, `primary`, `ring`, and `inverse` use Ink.
+- `muted-foreground` uses Ink at 62% opacity.
+- `secondary`, `accent`, and `surface-subtle` are low-opacity Ink fills.
+- `border` uses Ink at 12%; `border-strong` is reserved for control boundaries.
+- The sidebar uses a 2.5% Ink tint to distinguish persistent navigation from the document canvas.
+- Selected and status states always include text, weight, or structure; color is never the only cue.
+
+Do not create separate gray, blue, green, red, or accent ramps. Destructive actions may remain monochrome until a real destructive flow needs a measured semantic treatment.
 
 ## Typography
 
-Use Instrument Sans throughout the interface. Its compact forms and open counters keep dense operational controls readable without resembling default system UI. Bundle the variable font so Relay never fetches it at runtime. Use IBM Plex Mono for content hashes, version IDs, timestamps, provider job IDs, and short technical identifiers only.
+Use Instrument Sans for the interface. Use IBM Plex Mono only for hashes, version identifiers, timestamps that benefit from fixed-width digits, and technical IDs.
 
-Headings are compact and slightly tightened. Body copy stays at 14px with a 1.5 line height. Do not shrink supporting text below 12px. Sentence case is the default for every heading, label, and button.
+- Product pages start with a 24px semibold title.
+- Section headings are 14px semibold.
+- Body text is 14px with a 1.5 line height.
+- Dense navigation and row titles may use 13px at weight 500 or 600.
+- Captions and metadata are 12px; do not go smaller.
+- Use sentence case for headings, labels, buttons, and navigation.
+- Use `text-wrap: balance` for short headings and `text-wrap: pretty` for descriptions.
+- Cap reading text at roughly 60–75 characters.
+- Use tabular numerals for changing counts and times.
 
-Use the display role once on onboarding, an empty state, or a design-system introduction. Product screens normally start with `heading-lg`. Use weight to establish hierarchy before adding size.
+## Layout and density
 
-## Layout
+The main content region is at most 1120px wide. Use 40px horizontal padding on wide product screens, 32px on medium screens, and 20px on narrow screens.
 
-Build on a 4px base unit. Common gaps are 8px within a control, 12px within a compact group, 16px within a panel, 24px between related groups, and 32px between sections.
+Group with space before adding a line. The gap between groups must be at least twice the gap within a group. Shared alignment edges matter more than symmetry.
 
-The reference layout uses a 12-column grid with 24px gutters inside a 1120px maximum-width main region. Documentation pages use 56px horizontal padding and 72px initial vertical padding; section bands use 64px vertical padding and one `border` divider. At 900px use 32px page padding. At 660px use 20px page padding, stack all grid regions, and reduce section padding to 48px.
+At wide widths, project detail views may use:
 
-Reference introductions place primary copy across eight columns and compact metadata in columns ten through twelve. Display headings use `clamp(42px, 6vw, 68px)`, `0.98` line height, and `-0.055em` letter spacing. Supporting ledes use 17px type, `1.55` line height, and a maximum width of 640px.
+- a primary reading column no wider than 680px;
+- a 260px contextual column;
+- at least 48px between them.
 
-Wide workspace screens may use a 64px product rail or a 240px documentation rail. Keep the primary reading column between 640px and 760px when the window allows. Video players, review timelines, provenance diagrams, and evidence tables may use the remaining width.
+At narrow widths, stack the primary content before contextual content. Never preserve a desktop split by shrinking text. The document must reflow at 320px without horizontal page scrolling.
 
-Every screen has one clear focal object:
+## Alignment
 
-- Research: the claim and its supporting sources.
-- Content: the exact script or scene being reviewed.
-- Production: the active job and honest operational state.
-- Review: the current video frame and nearest unresolved comment.
-- Publish: the approved file, destination, visibility, and scheduled time.
+Alignment is part of the product's finish, not a final cleanup step.
 
-Keep content aligned to shared edges. Avoid centered application layouts except for small empty states. Do not use a dashboard grid when a list-and-detail or artifact-and-decision layout explains the workflow better.
+- Establish one leading edge per hierarchy level and reuse it across headings, rows, and controls.
+- Use logical inset properties (`start` and `end`) for directional placement. Do not mix `right` with `end` or `left` with `start` on the same component.
+- Center icons geometrically inside their hit area first. Apply an optical nudge only after measuring the rendered boxes.
+- An icon beside text follows the text's optical weight: use a 1.75px stroke beside medium text and 2px beside semibold text.
+- Keep text and icons on one visual baseline. Do not compensate with arbitrary top margins on individual SVGs.
+- Trailing actions align with the outer edge of the rows they govern, not the text inset.
+- Adjacent controls share height, radius, and baseline.
+- Do not use negative margins to create hover bleeds inside constrained columns; they produce local overflow and fragile edges.
 
-## Tailwind implementation
+The project-group add button is the reference for compact icon actions: a 28px hit area, 14px icon, 2px stroke, 6px radius, and a 2px inset from the top and trailing edge of its 32px label row.
 
-Build page and component layout with Tailwind CSS v4 utilities directly in React markup. Keep `app/globals.css` limited to semantic theme variables, font and rendering defaults, reduced-motion behavior, selection color, and native scrollbar styling. Do not recreate page-specific class systems in global CSS.
+## Sidebar
 
-Use semantic utilities such as `bg-background`, `bg-card`, `text-foreground`, `text-muted-foreground`, `border-border`, and `ring-ring`. Arbitrary values are appropriate when encoding an exact system value that is not part of Tailwind's default scale, such as the 68px display cap, 0.98 line height, or 24px twelve-column gutter. Shared interactive behavior belongs in the shadcn primitive, not duplicated across pages.
+The sidebar is persistent product chrome inspired by the density and calm of Linear and Notion; it is not a card rail.
 
-## Elevation and depth
+- Desktop width is 240px. Mobile drawer width is 272px.
+- Use the subtle sidebar tint and one structural divider on its trailing edge.
+- Brand, navigation, and project groups align to the same 8px inset.
+- Navigation rows are 32px high with a 6px radius and 8px inline padding.
+- Use one familiar 16px outline icon per navigation row at a 1.75px stroke.
+- The active row uses the selected Ink fill and medium weight. Do not add a leading bar, colored icon, outline, or pill.
+- Counts are plain tabular text at the trailing edge, not badges.
+- A project name is the group label. Do not repeat it in a separate project card or breadcrumb block.
+- Separate groups with 16–24px of space, not rules.
+- The account area sits at the bottom without a divider unless multiple account actions require one.
 
-Use borders, spacing, and surface changes before shadow. Relay is flat at rest except for the shallow tactile edge on buttons shown in the canonical reference.
+## Project index
 
-Buttons use only their specified 1–3px edge shadows. Reserve larger shadow for temporary layers and the selected artifact inside a review frame. Use one restrained floating shadow: `0 14px 36px rgba(32, 34, 29, 0.12), 0 2px 8px rgba(32, 34, 29, 0.06)`.
+The project index is a compact list, not a gallery.
 
-A panel must not contain another elevated panel. Nested content uses a divider or `surface-subtle` fill.
+- Put the page title and `New project` action on one line when space permits.
+- Each project is one rounded hover row with a title, one-line description, a short operational value, and a directional cue.
+- Do not use project icons, card outlines, shadows, multi-column statistics, or status badges.
+- Rows wrap naturally on narrow screens.
 
-## Shapes
+## Project detail
 
-Controls use a 10px radius. Content panels and media previews use 10px or 14px. Small controls may use 6px. The radius never becomes the main visual idea.
+The selected topic is the focal object.
 
-Use a full radius only for a short status mark when it materially improves scanning. Ordinary metadata, filters, versions, and navigation items are not pills.
+- Show the topic title, one-sentence research question, one metadata line, and one primary action.
+- Do not repeat the project name in a breadcrumb when the sidebar already establishes project context.
+- Use compact segmented tabs below the topic summary. Tabs do not need a full-width divider.
+- The default content view shows one primary list and at most one quiet contextual surface.
+- Signal rows use spacing and a hover fill instead of permanent separators.
+- Source coverage and run history may use `surface-subtle` without a border or shadow.
+- Empty states are left-aligned, one sentence long, and free of illustrations.
 
-Icons use a 1.75px stroke at 16px or 18px. Prefer familiar actions. Do not place icons inside decorative colored squares.
+## Borders and surfaces
 
-## Components
+Borders communicate boundaries, not decoration.
 
-Buttons are 36px high, use 13px semibold text, a 10px radius, a 1px boundary, 14px horizontal padding, and a 7px internal gap. The surface button has a `border-strong` boundary and shallow white/ink edge. On hover it moves up 1px, changes to `#F4F5ED`, and strengthens its boundary to `#7F8475`. Active buttons return to rest and remove the edge shadow. Color, border, shadow, and transform transitions use `200ms cubic-bezier(0.22, 1, 0.36, 1)`.
+Keep borders for:
 
-The carbon button confirms a local or reversible action and uses the exact primary shadows declared above. The citron button advances the selected artifact, confirms a consequential action after its destination and effect are clear, or serves as the landing page's single preferred call to action. A view must not show carbon and citron buttons as competing calls to action. Ghost and destructive buttons remain flat.
+- persistent chrome against the document canvas;
+- input and button boundaries;
+- focus state;
+- tables or data structures where row alignment would otherwise be lost;
+- temporary overlays.
 
-Renderer primitives come from shadcn and are themed through semantic variables in `app/globals.css`. Map carbon to `primary`, mineral paper to `background`, chalk to `card` and `popover`, soft citron to `accent`, and dark olive to `ring`. Bright citron has its own `signal` token and Button variant. Do not replace these mappings with arbitrary color utilities in product components.
+Do not place a divider on both a section container and its first or last child. Do not underline a header, tabs, every row, and a side panel in the same view. If spacing or a subtle fill can group the content, delete the line.
 
-Inputs are 40px high with a visible label. Placeholder text cannot replace the label. Focus uses a 2px dark olive ring with a 2px offset.
+Surfaces are flat at rest. Do not use shadows on page content. Temporary overlays may use one restrained shadow when the border alone does not separate them from the page.
 
-### Workflow state
+## Controls
 
-Use these exact concepts where applicable: Draft, In review, Changes requested, Approved, Queued, Running, Failed, Scheduled, and Published. Status is aligned text within its owning row. Add a small dot only when it materially improves scanning; do not turn routine metadata into badge rows.
+Buttons are 36px high, use 13px semibold text, an 8px radius, a 1px boundary, 14px horizontal padding, and a 7px internal gap.
 
-### Evidence and versions
+- Primary buttons use Ink with white text.
+- Secondary buttons use white with a strong Ink boundary.
+- Ghost buttons use no resting fill and are reserved for compact contextual actions.
+- Hover changes opacity, fill, or boundary only. Buttons do not jump, bounce, or scale.
+- Focus uses a 2px Ink ring with a 2px offset.
+- Use verb-first labels that name the action.
 
-Claims show their exact statement, confidence, source count, caveats, and scene usage. Content artifacts show version and approval state. Technical hashes use Mono and remain subordinate until a verification or publishing decision needs them.
-
-### Approval surfaces
-
-Keep the artifact and its approval decision inside one coherent frame. The decision panel names the exact version and explains what approval locks. Any action that starts generation, incurs provider cost, or publishes publicly states that consequence before confirmation.
-
-### Empty states
-
-Empty states explain the next input in one sentence. Research may ask for a topic; Production may ask for approved content; Review may state that no render exists. They do not need illustrations, marketing copy, or grids of possibilities.
-
-## Product pattern
-
-Use an artifact-and-decision split for consequential review:
-
-- The wider side shows the sourced claim, script passage, storyboard scene, render frame, or publish payload.
-- The decision side shows the exact version, evidence or cost summary, caveats, and available action.
-- On narrow screens, stack the artifact before the decision so source order remains the reading order.
-- Keep the preferred action at the end of the decision panel, after the evidence that earns it.
-
-The system source of truth is the immutable artifact record. Editing an approved artifact creates a new version and removes the old approval from the current path. Publishing verifies that the uploaded video hash matches the approved video hash.
-
-## Scrolling
-
-Use the browser's native scrolling behavior with `scroll-behavior: smooth` for same-page navigation. The scrollbar is narrow and quiet: a transparent track, a `border-strong` thumb, a full radius, and a 3px canvas-colored inset border. Hover changes the thumb to `text-secondary`. Firefox uses `scrollbar-width: thin` and the same semantic colors. Do not replace native scrolling with a JavaScript scroll engine.
+Tabs use a low-opacity Ink track, a white active segment, 28px tab height, and a 6px radius. Active text uses Ink and medium or semibold weight. Do not combine the segmented treatment with an underline.
 
 ## Motion
 
-Default to stillness. Do not use marker sweeps, text highlights, ambient motion, or decorative entrance animation. Hover and focus transitions use `200ms cubic-bezier(0.22, 1, 0.36, 1)`; button hover may use the reference's 1px tactile lift. React View Transitions may preserve continuity when an active workflow stage or selected artifact changes. Do not animate evidence that the user is reading or reveal every section on scroll.
+Default to stillness. High-frequency hover, selection, and focus transitions use only the changing properties and last 150ms with `cubic-bezier(0.2, 0, 0, 1)`.
 
-Respect reduced-motion preferences by removing animation and transition duration. Unsupported View Transition browsers must retain the complete interaction without motion.
+Drawers and overlays may use a 200ms enter transition. Exits may use the same duration with a stronger ease-in curve. All movement must be interruptible and the final state must remain clear without motion.
 
-## Accessibility
+Under `prefers-reduced-motion: reduce`, transitions and animations finish immediately. Do not animate page content, evidence, or route changes for decoration.
 
-Use landmarks, one descriptive `h1`, ordered headings, visible focus, native controls, useful labels, semantic tables, figures, captions, and live regions for asynchronous state. Source order is reading order. Meet WCAG AA and never rely on color alone.
+## Delight and speed
 
-At narrow widths, stack the grid before shrinking text. Long tables may scroll within a labelled region. Keep consequential controls at least 36px high and primary touch targets at least 40px where the interface is touch-oriented.
+Delight comes from precision and responsiveness: a hover state appearing immediately, a selected topic changing without layout shift, a drawer returning focus to its trigger, and navigation feeling predictable. It does not come from adding more visual material.
 
-## Do's and don'ts
+- Keep high-frequency feedback at 150ms or faster.
+- Animate only `color`, `background-color`, `border-color`, `opacity`, or a small contextual icon translation.
+- Avoid blur, filter, large shadow, layout, and height animation in persistent product UI.
+- Never delay content with entrance animation.
+- Use `next/link` for internal navigation and keep its default prefetch behavior unless measurement proves it wasteful.
+- Keep static data and JSX outside render functions when practical.
+- Keep client-component boundaries as narrow as the interaction allows; static pages remain server components.
+- Do not add an animation library for routine interface motion.
+- Do not add memoization, deferred state, or loading UI to trivial local interactions. Immediate work is faster than orchestration overhead.
+- Prevent layout shift by keeping control dimensions and selected-state weight stable.
+- Prefer native scrolling and platform focus behavior over JavaScript replacements.
 
-Do:
+A delightful detail must be quiet, fast, reversible, and useful. If removing it does not make the interface less clear or responsive, it probably does not belong.
 
-- Put the artifact before operational metadata.
-- Keep claims linked to sources and scenes.
-- Make every approval name a version.
-- Use citron to show where the current workflow action will happen.
-- Use Tailwind utilities for page layout and keep global CSS genuinely global.
-- Name provider cost, public destination, and payload before confirmation.
-- Keep keyboard focus visible and follow source order.
+## Copy
 
-Don't:
+Copy is neutral, direct, and brief.
 
-- Add gradients, glass effects, decorative noise, or shadows beyond the specified tactile button edge and floating-layer shadow.
-- Use citron markers, text highlights, or accent backgrounds as decoration.
-- Introduce a JavaScript smooth-scroll engine or hide the native scrollbar.
-- Turn every group into a card.
-- Use color as the only sign of status.
-- Hide a consequential action behind a generic “Continue” button.
-- Animate evidence under review.
-- Claim work is approved, rendered, or published before the durable record confirms it.
+- Use consistent terms: project, topic, signal, source, research, content, approval.
+- Buttons begin with a verb: `New project`, `Start research`, `Add source`.
+- Metadata stays on one concise line where it fits.
+- Empty states explain what is missing and what action unlocks the next step.
+- Do not add promotional copy inside the product workspace.
+
+## Accessibility and responsive checks
+
+- Use one visible `main` landmark and one descriptive `h1` per page.
+- Use native links for navigation and native buttons for actions.
+- Every icon-only control has an accessible name.
+- Every keyboard-reachable control has a visible `focus-visible` indicator.
+- Restore focus to the sidebar trigger after the mobile drawer closes.
+- Preserve a logical heading order and source order.
+- Maintain WCAG AA contrast against the rendered background.
+- Keep touch-oriented primary targets at least 40px where density permits; never go below the 24px WCAG target.
+
+Before shipping interface changes, inspect 1440px, 390px, and 320px widths. Check `documentElement.scrollWidth` against `clientWidth`, long topic names, tab reachability, drawer focus restoration, and 200% zoom. Ignore intentional clipping inside `sr-only` accessibility utilities when auditing overflow.
+
+## Final taste check
+
+Before calling an interface finished, ask:
+
+- Is anything repeated that could be removed?
+- Can spacing replace any visible line?
+- Does every icon explain an action or object?
+- Do compact actions align with the row that owns them?
+- Is there exactly one obvious primary action?
+- Does the page remain calm when every real label is at its longest?
+- Do hover, focus, active, and selected states feel immediate and related?
+- Does the layout work at 320px without clipping or hidden controls?
+- Did the implementation preserve the Ink-only system?
+- Would the screen still feel professional after eight hours of use?

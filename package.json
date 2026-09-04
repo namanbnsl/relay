@@ -5,7 +5,6 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "convex:dev": "convex dev",
-    "convex:seed": "convex run seed:seedSecretNotes",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
