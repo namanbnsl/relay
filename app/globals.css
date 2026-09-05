@@ -83,6 +83,39 @@
   --selection: rgb(32 34 29 / 0.16);
 }
 
+/* Research workspace: one neutral palette, independent of landing-page tokens. */
+.research-workspace {
+  color: var(--foreground);
+  background: var(--background);
+  --background: #ffffff;
+  --foreground: #202020;
+  --card: #ffffff;
+  --card-foreground: #202020;
+  --primary: #202020;
+  --primary-foreground: #ffffff;
+  --primary-hover: #202020;
+  --muted-foreground: #6b6b6b;
+  --secondary: #f4f4f4;
+  --secondary-foreground: #202020;
+  --secondary-hover: #eeeeee;
+  --surface-subtle: #f7f7f7;
+  --border: #e9e9e9;
+  --border-strong: #d4d4d4;
+  --border-hover: #a3a3a3;
+  --accent: #eeeeee;
+  --accent-foreground: #202020;
+  --ring: #202020;
+  --sidebar: #fafafa;
+  --sidebar-foreground: #202020;
+  --sidebar-primary: #202020;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eeeeee;
+  --sidebar-accent-foreground: #202020;
+  --sidebar-border: #e9e9e9;
+  --sidebar-ring: #202020;
+  --selection: #dedede;
+}
+
 @layer base {
   * {
     box-sizing: border-box;

@@ -1,17 +1,12 @@
 "use client";
 
-import { Show, SignInButton, UserButton } from "@clerk/nextjs";
-import { ArrowLeft, Hash, LogIn, Plus } from "lucide-react";
+import { Show, UserButton } from "@clerk/nextjs";
+import { ArrowLeft, Compass, Files, Globe2, Plus } from "lucide-react";
 import Link from "next/link";
-
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupAction,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -19,141 +14,166 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
 
-type SidebarTopic = {
-  id: string;
-  title: string;
-  newSignalCount: number;
-};
+export type WorkspacePage = "discover" | "topics" | "sources";
+const pages = [
+  { id: "discover", label: "Discover", icon: Compass },
+  { id: "topics", label: "Topics", icon: Files },
+  { id: "sources", label: "Sources", icon: Globe2 },
+] satisfies { id: WorkspacePage; label: string; icon: typeof Compass }[];
 
-type AppNavigation = {
-  projectName: string;
-  selectedTopicId: string;
-  topics: ReadonlyArray<SidebarTopic>;
-  onSelectTopic: (topicId: string) => void;
-};
-
-export function AppShell({
-  children,
-  navigation,
-}: Readonly<{
+type AppShellProps = {
   children: React.ReactNode;
-  navigation: AppNavigation;
-}>) {
+  page: WorkspacePage;
+  selectedTopicId: string | null;
+  topics: { id: string; title: string }[];
+  onNavigate: (page: WorkspacePage) => void;
+  onSelectTopic: (id: string) => void;
+  onAddTopic: () => void;
+};
+
+export function AppShell(props: AppShellProps) {
   return (
-    <SidebarProvider>
+    <SidebarProvider className="research-workspace">
+      <WorkspaceShell {...props} />
+    </SidebarProvider>
+  );
+}
+
+function WorkspaceShell({
+  children,
+  page,
+  selectedTopicId,
+  topics,
+  onNavigate,
+  onSelectTopic,
+  onAddTopic,
+}: AppShellProps) {
+  const { setOpenMobile } = useSidebar();
+  function navigate(action: () => void) {
+    action();
+    setOpenMobile(false);
+  }
+  return (
+    <>
       <a
-        className="sr-only z-50 rounded-md bg-primary px-4 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:start-4 focus:top-4"
         href="#workspace-content"
+        className="sr-only z-50 rounded-md bg-primary px-4 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:start-4 focus:top-4"
       >
         Skip to workspace
       </a>
-
       <Sidebar
-        className="border-e border-sidebar-border"
         collapsible="offcanvas"
+        className="research-workspace border-e border-sidebar-border"
       >
-        <SidebarHeader className="px-3 pb-2 pt-3">
+        <SidebarHeader className="flex h-14 justify-center px-5 py-0">
           <Link
-            className="flex h-8 w-fit items-center rounded-md px-2 text-sm font-semibold tracking-[-0.035em] transition-[background-color] duration-150 ease-[cubic-bezier(0.2,0,0,1)] hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
             href="/projects"
-            aria-label="Relay projects"
+            className="w-fit rounded-sm text-lg font-semibold tracking-[-0.055em] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             Relay
           </Link>
         </SidebarHeader>
-
-        <SidebarContent className="px-2 pb-2">
-          <SidebarGroup className="p-0">
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
+        <SidebarContent className="gap-0 px-3 pt-5">
+          <nav aria-label="Workspace">
+            <SidebarMenu className="gap-1">
+              {pages.map((item) => (
+                <SidebarMenuItem key={item.id}>
                   <SidebarMenuButton
-                    className="h-8 rounded-md px-2 text-[13px] font-medium text-muted-foreground transition-[background-color,color] duration-150 ease-[cubic-bezier(0.2,0,0,1)] hover:bg-secondary hover:text-foreground"
-                    asChild
+                    className="h-9 gap-2.5 rounded-md px-3 text-[13px] text-muted-foreground data-[active=true]:text-foreground"
+                    isActive={page === item.id && selectedTopicId === null}
+                    aria-current={
+                      page === item.id && selectedTopicId === null
+                        ? "page"
+                        : undefined
+                    }
+                    onClick={() => navigate(() => onNavigate(item.id))}
                   >
-                    <Link href="/projects">
-                      <ArrowLeft strokeWidth={1.75} aria-hidden="true" />
-                      <span>All projects</span>
-                    </Link>
+                    <item.icon strokeWidth={1.5} aria-hidden="true" />
+                    <span>{item.label}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-
-          <SidebarGroup className="mt-4 p-0">
-            <SidebarGroupLabel className="h-8 px-2 text-xs font-semibold text-sidebar-foreground">
-              <span className="truncate">{navigation.projectName}</span>
-            </SidebarGroupLabel>
-            <SidebarGroupAction
-              className="end-0.5 top-0.5 size-7 rounded-md text-muted-foreground transition-[background-color,color] duration-150 ease-[cubic-bezier(0.2,0,0,1)] hover:bg-secondary hover:text-foreground"
-              aria-label="Add topic"
-              title="Add topic"
-              type="button"
-            >
-              <Plus strokeWidth={2} />
-            </SidebarGroupAction>
-            <SidebarGroupContent>
-              <SidebarMenu className="gap-0.5">
-                {navigation.topics.map((topic) => (
-                  <SidebarMenuItem key={topic.id}>
-                    <SidebarMenuButton
-                      className="h-8 rounded-md px-2 text-[13px] font-medium text-muted-foreground transition-[background-color,color] duration-150 ease-[cubic-bezier(0.2,0,0,1)] hover:bg-secondary hover:text-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground"
-                      aria-pressed={topic.id === navigation.selectedTopicId}
-                      isActive={topic.id === navigation.selectedTopicId}
-                      onClick={() => navigation.onSelectTopic(topic.id)}
-                      type="button"
-                    >
-                      <Hash strokeWidth={1.75} aria-hidden="true" />
-                      <span className="truncate">{topic.title}</span>
-                      {topic.newSignalCount > 0 ? (
-                        <span className="ms-auto text-[11px] font-medium tabular-nums text-muted-foreground">
-                          {topic.newSignalCount}
-                          <span className="sr-only"> new signals</span>
-                        </span>
-                      ) : null}
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-
-        <SidebarFooter className="px-2 py-3">
-          <Show when="signed-out">
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SignInButton>
-                  <SidebarMenuButton className="h-8 rounded-md px-2 text-[13px] font-medium">
-                    <LogIn strokeWidth={1.75} aria-hidden="true" />
-                    <span>Sign in</span>
-                  </SidebarMenuButton>
-                </SignInButton>
-              </SidebarMenuItem>
+              ))}
             </SidebarMenu>
-          </Show>
+          </nav>
+          <div className="mb-2 mt-8 flex items-center justify-between ps-3 pe-1">
+            <p className="text-xs text-muted-foreground">Saved topics</p>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Add topic"
+              onClick={() => navigate(onAddTopic)}
+            >
+              <Plus className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+            </Button>
+          </div>
+          <nav aria-label="Saved topics">
+            <SidebarMenu className="gap-1">
+              {topics.map((topic) => (
+                <SidebarMenuItem key={topic.id}>
+                  <SidebarMenuButton
+                    className="h-auto min-h-9 rounded-md px-3 py-2 text-[13px] leading-5 text-muted-foreground data-[active=true]:text-foreground [&>span:last-child]:overflow-visible [&>span:last-child]:whitespace-normal [&>span:last-child]:break-words"
+                    isActive={selectedTopicId === topic.id}
+                    aria-current={
+                      selectedTopicId === topic.id ? "page" : undefined
+                    }
+                    onClick={() => navigate(() => onSelectTopic(topic.id))}
+                  >
+                    <span>{topic.title}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </nav>
+        </SidebarContent>
+        <SidebarFooter className="gap-4 px-6 py-5">
+          <Link
+            href="/projects"
+            className="flex min-h-8 items-center gap-2 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ArrowLeft
+              className="size-3.5"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+            All projects
+          </Link>
           <Show when="signed-in">
             <UserButton showName />
           </Show>
         </SidebarFooter>
       </Sidebar>
-
-      <SidebarInset className="min-h-svh min-w-0" id="workspace-content">
-        <header className="flex h-12 items-center gap-3 border-b border-border px-3 md:hidden">
-          <SidebarTrigger
-            className="-ms-1 size-10"
-            aria-label="Open project navigation"
-          />
-          <span className="font-semibold tracking-[-0.04em]">Relay</span>
-          <span className="ms-auto max-w-[55vw] truncate text-xs text-muted-foreground">
-            {navigation.projectName}
-          </span>
+      <SidebarInset className="min-w-0">
+        <header className="flex min-h-14 items-center justify-between gap-3 border-b border-border px-5 sm:px-8">
+          <div className="flex min-w-0 items-center gap-2">
+            <SidebarTrigger
+              className="md:hidden"
+              aria-label="Toggle workspace navigation"
+            />
+            <span className="text-[13px] font-medium">AI industry brief</span>
+          </div>
+          <details
+            className="relative shrink-0"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") event.currentTarget.open = false;
+            }}
+          >
+            <summary className="flex min-h-8 cursor-pointer list-none items-center rounded-sm text-xs text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              Sample workspace
+            </summary>
+            <div className="absolute end-0 top-10 z-30 w-60 rounded-lg border border-border bg-background p-4 text-xs leading-6 text-muted-foreground">
+              Fictional research and review results. No live monitoring or model
+              calls. Changes reset on reload.
+            </div>
+          </details>
         </header>
-        {children}
+        <div id="workspace-content" className="min-w-0 flex-1">
+          {children}
+        </div>
       </SidebarInset>
-    </SidebarProvider>
+    </>
   );
 }

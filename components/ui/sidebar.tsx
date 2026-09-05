@@ -169,16 +169,6 @@ function Sidebar({
   const { isMobile, state, openMobile, setOpenMobile, mobileTriggerRef } =
     useSidebar();
 
-  const handleMobileOpenChange = React.useCallback(
-    (nextOpen: boolean) => {
-      setOpenMobile(nextOpen);
-      if (!nextOpen) {
-        window.setTimeout(() => mobileTriggerRef.current?.focus(), 0);
-      }
-    },
-    [mobileTriggerRef, setOpenMobile],
-  );
-
   if (collapsible === "none") {
     return (
       <div
@@ -196,12 +186,19 @@ function Sidebar({
 
   if (isMobile) {
     return (
-      <Sheet open={openMobile} onOpenChange={handleMobileOpenChange} {...props}>
+      <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
         <SheetContent
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:end-3 [&>button]:top-4 [&>button]:flex [&>button]:size-10 [&>button]:items-center [&>button]:justify-center [&>button]:rounded-[10px] [&>button]:opacity-100"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            mobileTriggerRef.current?.focus();
+          }}
+          className={cn(
+            "w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:end-3 [&>button]:top-4 [&>button]:flex [&>button]:size-10 [&>button]:items-center [&>button]:justify-center [&>button]:rounded-md [&>button]:opacity-100",
+            className,
+          )}
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,

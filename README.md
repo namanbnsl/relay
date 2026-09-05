@@ -2,7 +2,17 @@
 
 Relay is a Bun-powered Next.js workspace for evidence-backed video production.
 
-It uses Clerk for web sessions and OAuth-protected MCP access. Authenticated users enter the UI through `/projects`; the research workspace is currently interface-only and does not persist project data. The Streamable HTTP MCP server is mounted at `/mcp` and still exposes only the sample `hello` tool.
+It uses Clerk for web sessions and OAuth-protected MCP access. The research workspace at `/projects/ai-industry-brief` is an interactive sample with session-only state. The Streamable HTTP MCP server is mounted at `/mcp` and still exposes only the sample `hello` tool.
+
+## Research workspace sample
+
+Discover includes fictional developments and research ideas. Research an item directly or add it as a new investigation in an existing topic. Topics support editable outlines, one-time or daily cadence, separate investigations, brief editing, evidence review, and version-specific approvals. Sources is a shared reading list with website entry, suggestions, and pause/resume controls.
+
+Try the permissions story in Discover: open the flagged claim, inspect its fictional source excerpt, apply qualified wording, and approve the brief. Then create, edit, approve, and copy a WhatsApp post or written video script. Editing approved research preserves the earlier approval and flags existing drafts as using an older research version. Approved draft text is preserved in its history.
+
+Open the existing AI coding agents topic and choose **Try sample daily update** to compare two dated investigations. Custom topics open blank investigations for manually written notes.
+
+All research, benchmark figures, and reviewer notes in the permissions story are fictional fixtures. Draft creation uses a local text template, not an LLM. There are no live monitor checks, scheduled tasks, model calls, Google integrations, asset generation, rendering, or publishing. Changes survive workspace navigation but reset on reload or when leaving the workspace route. The existing app layout currently leaves authentication protection disabled for UI preview; this prototype introduces no persisted project data.
 
 ## Clerk setup
 
@@ -40,6 +50,7 @@ Open `http://localhost:3000` for the public introduction. Signed-in users can op
 bun run typecheck
 bun run lint
 bun run build
+bun test components/projects/workspace-model.test.ts
 ```
 
 The product direction is in `IDEA.md`; the interface rules and tokens are in `DESIGN.md`.
