@@ -1,19 +1,13 @@
-import { notFound } from "next/navigation";
-
-import { ResearchWorkspace } from "@/components/projects/research-workspace";
-
-const projectIds = new Set(["ai-industry-brief"]);
-
-export default async function ProjectWorkspacePage({
+import { auth } from "@clerk/nextjs/server";
+import { Project } from "@/components/projects/live-projects";
+export default async function ProjectPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ topic?: string }>;
 }) {
-  const { projectId } = await params;
-
-  if (!projectIds.has(projectId)) {
-    notFound();
-  }
-
-  return <ResearchWorkspace />;
+  await auth.protect();
+  const [{ projectId }, { topic }] = await Promise.all([params, searchParams]);
+  return <Project projectId={projectId} initialTopicId={topic} />;
 }

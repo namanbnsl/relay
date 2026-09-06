@@ -1,58 +1,60 @@
 # Relay
 
-Relay is a Bun-powered Next.js workspace for evidence-backed video production.
+Relay stores research, scripts, and human approvals. Your connected agent supplies inference through MCP; Relay does not run or pay for a model.
 
-It uses Clerk for web sessions and OAuth-protected MCP access. The research workspace at `/projects/ai-industry-brief` is an interactive sample with session-only state. The Streamable HTTP MCP server is mounted at `/mcp` and still exposes only the sample `hello` tool.
+## Current workflow
 
-## Research workspace sample
+Sign in at `/projects`, create a project, and add a topic. Ask your MCP client to read the topic, research it, and save its findings. The page updates from Convex. Inspect evidence, revise wording, submit for review, and approve the exact research version in Relay. Your agent can then save a script with narration and a visual plan for each scene. Review and approve scripts in Relay too.
 
-Discover includes fictional developments and research ideas. Research an item directly or add it as a new investigation in an existing topic. Topics support editable outlines, one-time or daily cadence, separate investigations, brief editing, evidence review, and version-specific approvals. Sources is a shared reading list with website entry, suggestions, and pause/resume controls.
+Five tables: `users`, `projects`, `topics`, `researchVersions`, `scriptVersions`. Evidence is embedded in claims. Each investigation has its own research version sequence; each topic has one script sequence. Saved content is immutable; review state can transition from draft to in review, then approved or changes requested. Changes requested require a new version. A script pins an exact research version; superseding that research blocks new script approval until the script is revised against approved research.
 
-Try the permissions story in Discover: open the flagged claim, inspect its fictional source excerpt, apply qualified wording, and approve the brief. Then create, edit, approve, and copy a WhatsApp post or written video script. Editing approved research preserves the earlier approval and flags existing drafts as using an older research version. Approved draft text is preserved in its history.
+Project and topic lists return up to 100 recent records; version history returns up to 10 per section. Version payloads are capped at 200 KB to bound database reads. `get_topic` can scope research history by investigation ID. Full pagination, monitoring, discovery ingestion, teams, generation, rendering, and publishing are deferred. The earlier fictional sample components remain in the source tree but are not mounted on live project pages.
 
-Open the existing AI coding agents topic and choose **Try sample daily update** to compare two dated investigations. Custom topics open blank investigations for manually written notes.
-
-All research, benchmark figures, and reviewer notes in the permissions story are fictional fixtures. Draft creation uses a local text template, not an LLM. There are no live monitor checks, scheduled tasks, model calls, Google integrations, asset generation, rendering, or publishing. Changes survive workspace navigation but reset on reload or when leaving the workspace route. The existing app layout currently leaves authentication protection disabled for UI preview; this prototype introduces no persisted project data.
-
-## Clerk setup
-
-1. Create or select a Clerk application.
-2. Copy `.env.example` to `.env.local` and replace both placeholder keys with the values from Clerk's API keys page.
-3. In Clerk's OAuth applications settings, enable CIMD for clients that support it and pre-register the clients you trust. Enable Dynamic Client Registration only when a client requires it.
-4. Set the instance's default OAuth scope to `openid` for MCP clients that omit the `scope` parameter.
-
-The MCP endpoint independently requires a Clerk OAuth access token with the `openid` scope. OAuth discovery is available at `/.well-known/oauth-protected-resource/mcp` and `/.well-known/oauth-authorization-server`.
-
-## Convex setup
-
-1. Run `bun run convex:dev` and create or select Relay's development project. Convex writes `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL` to `.env.local`.
-2. In the Clerk Dashboard, activate the Convex integration for this Clerk application and copy its Frontend API URL.
-3. Set that public issuer URL on the Convex development deployment:
-
-   ```bash
-   bunx convex env set CLERK_JWT_ISSUER_DOMAIN https://your-instance.clerk.accounts.dev
-   ```
-
-4. Keep `bun run convex:dev` running while developing against Convex. The current project UI does not read or write project data yet.
-
-## Run locally
+## Setup
 
 ```bash
 bun install
+bun run convex:dev
 bun run dev
 ```
 
-Open `http://localhost:3000` for the public introduction. Signed-in users can open `http://localhost:3000/projects` for the project and research-workspace UI. The standalone design reference remains at `http://localhost:3000/DESIGN_SYSTEM.html`.
+Configure `.env.local` using `.env.example`. Keep the existing Clerk application and Convex deployment. Activate Clerk's Convex integration and configure the Convex deployment with:
 
-## Verify
+- `CLERK_JWT_ISSUER_DOMAIN`: the Clerk Frontend API URL, for browser JWT verification.
+- `CLERK_SECRET_KEY`: the same Clerk instance's backend secret, for independent OAuth token verification in Convex. Set this through the Convex dashboard or `bunx convex env set CLERK_SECRET_KEY` using stdin. Never commit the secret.
+
+The MCP backend fails closed when its secret is not configured. OAuth access tokens are used only for verification, never written to Relay tables. The verification action checks revocation, expiration, `openid`, and user identity before calling internal database functions. All database access checks project ownership. Browser JWTs and OAuth access tokens use separate entry points; OAuth cannot invoke human review operations.
+
+Project routes require a Clerk web session in both the proxy and route. Public landing and OAuth metadata routes remain accessible. Use Clerk's canonical URL consistently (typically `localhost`, not `127.0.0.1`, in development).
+
+## MCP
+
+Connect your OAuth-capable client to `/mcp`. Configure Clerk OAuth clients with `openid`; prefer CIMD or pre-registration. Enable dynamic registration only if your client needs it. Discovery endpoints:
+
+- `/.well-known/oauth-protected-resource/mcp`
+- `/.well-known/oauth-authorization-server`
+
+Tools:
+
+- `list_projects`, `get_project`, `get_topic`
+- `create_topic`
+- `save_research`, `submit_research_for_review`
+- `save_script`, `submit_script_for_review`
+
+Create projects in Relay. Read saved state before revising. For a new investigation, choose a stable `investigationId` and use `expectedVersion: 0`; revisions reuse the investigation ID and pass the current version. Script revisions likewise pass their current version. Every save supplies a `requestId`: reuse it only for retries of the identical request. Conflicting writes are rejected. Write results contain saved IDs, version, status, next action, and a relative Relay path.
+
+Evidence includes an HTTP(S) URL, title, exact excerpt, retrieval time in Unix milliseconds, and `provenance: "agent"`. Relay labels this as agent-supplied; it does not claim to have independently captured or verified it. Review submission requires a nonempty summary and evidence-backed claims assessed as supported. Agent assessment never substitutes for human approval.
+
+## Verification
 
 ```bash
+bun run test
 bun run typecheck
 bun run lint
 bun run build
-bun test components/projects/workspace-model.test.ts
+bunx convex dev --once
 ```
 
-The product direction is in `IDEA.md`; the interface rules and tokens are in `DESIGN.md`.
+Tests exercise ownership, anonymous access, immutable versions, retry behavior, conflicts, review transitions, stale scripts, and the MCP identity boundary. The OAuth provider is mocked in the identity-boundary tests; a real external client OAuth round trip is a separate integration check.
 
-The reserved Relay identity mark remains at `public/relay-mark.png`; the current design-system previews intentionally do not use it.
+Product direction: `IDEA.md`. Interface rules: `DESIGN.md`.
