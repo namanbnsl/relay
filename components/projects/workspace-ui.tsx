@@ -11,7 +11,7 @@ export function WorkspaceHeading({
   action,
 }: {
   title: string;
-  description: string;
+  description?: string;
   action?: ReactNode;
 }) {
   return (
@@ -20,9 +20,11 @@ export function WorkspaceHeading({
         <h1 className="text-2xl font-semibold leading-tight tracking-[-0.035em]">
           {title}
         </h1>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          {description}
-        </p>
+        {description ? (
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            {description}
+          </p>
+        ) : null}
       </div>
       {action}
     </div>

@@ -8,9 +8,6 @@ import { z } from "zod";
 import { api } from "@/convex/_generated/api";
 
 const id = z.string().min(1).max(128);
-const requestId = id.describe(
-  "A unique request ID. Reuse it only when retrying identical content.",
-);
 const claim = z.object({
   text: z.string().min(1).max(4000),
   assessment: z.enum(["supported", "disputed", "uncertain"]),
@@ -24,8 +21,8 @@ const claim = z.object({
         retrievedAt: z
           .number()
           .nonnegative()
-          .describe("Unix milliseconds when retrieved"),
-        provenance: z.literal("agent"),
+          .describe("Unix milliseconds when retrieved, if known")
+          .optional(),
       }),
     )
     .max(10),
@@ -64,11 +61,9 @@ const handler = createMcpHandler(
         const data = {
           ...result,
           nextAction:
-            result.status === "in_review"
-              ? "Review this version in Relay."
-              : result.status === "draft"
-                ? "Submit the saved version for review when ready."
-                : "Read the saved topic or project to continue.",
+            result.status === "pending"
+              ? "Review the document in Relay."
+              : "Read the saved topic or project to continue.",
           path: `/projects/${result.projectId}${result.topicId ? `?topic=${result.topicId}` : ""}`,
         };
         return {
@@ -84,7 +79,7 @@ const handler = createMcpHandler(
               text:
                 error instanceof ConvexError && typeof error.data === "string"
                   ? error.data
-                  : "Relay could not complete this request. Check authentication and retry with the same request ID.",
+                  : "Relay could not complete this request. Check authentication and retry.",
             },
           ],
         };
@@ -124,8 +119,8 @@ const handler = createMcpHandler(
       "get_topic",
       {
         description:
-          "Read the brief and up to 10 recent research and script versions. Use investigationId to scope research history. Continue from saved state; Relay does not run inference.",
-        inputSchema: z.object({ topicId: id, investigationId: id.optional() }),
+          "Read the topic, current documents, and recent history. Relay stores your work; you supply the reasoning.",
+        inputSchema: z.object({ topicId: id }),
         annotations: readAnnotations,
       },
       (args, extra) =>
@@ -138,9 +133,7 @@ const handler = createMcpHandler(
         inputSchema: z.object({
           projectId: id,
           title: z.string().min(1).max(160),
-          question: z.string().min(1).max(2000),
-          outline: z.string().max(10000),
-          requestId,
+          question: z.string().min(1).max(12000),
         }),
         annotations: writeAnnotations,
       },
@@ -151,14 +144,11 @@ const handler = createMcpHandler(
       "save_research",
       {
         description:
-          "Save research you authored as a new immutable version. Use a stable investigationId for revisions; expectedVersion is 0 for a new investigation. Assessments are agent judgments, not human approval. Evidence is agent-supplied, not independently verified by Relay.",
+          "Save findings and sources for human review. Relay creates revisions and ignores unchanged content automatically. Sources are agent-supplied, not independently verified by Relay.",
         inputSchema: z.object({
           topicId: id,
-          investigationId: id,
-          expectedVersion: z.number().int().nonnegative(),
           summary: z.string().min(1).max(20000),
-          claims: z.array(claim).max(50),
-          requestId,
+          claims: z.array(claim).min(1).max(50),
         }),
         annotations: writeAnnotations,
       },
@@ -169,11 +159,9 @@ const handler = createMcpHandler(
       "save_script",
       {
         description:
-          "Save your script narration and visual plan. Requires current approved research. One script version sequence per topic; expectedVersion is 0 initially.",
+          "Save narration and visual instructions for human review. Use the ID of the current approved research returned by get_topic. Relay handles revisions automatically.",
         inputSchema: z.object({
-          topicId: id,
           researchVersionId: id,
-          expectedVersion: z.number().int().nonnegative(),
           title: z.string().min(1).max(160),
           scenes: z
             .array(
@@ -184,36 +172,14 @@ const handler = createMcpHandler(
             )
             .min(1)
             .max(100),
-          requestId,
         }),
         annotations: writeAnnotations,
       },
       (args, extra) =>
         call({ kind: "save_script", ...args }, extra.http?.authInfo?.token),
     );
-    server.registerTool(
-      "submit_research_for_review",
-      {
-        description:
-          "Submit an evidence-backed research version. The human must approve it in Relay.",
-        inputSchema: z.object({ versionId: id }),
-        annotations: writeAnnotations,
-      },
-      (args, extra) =>
-        call({ kind: "submit_research", ...args }, extra.http?.authInfo?.token),
-    );
-    server.registerTool(
-      "submit_script_for_review",
-      {
-        description: "Submit a script for human approval in Relay.",
-        inputSchema: z.object({ versionId: id }),
-        annotations: writeAnnotations,
-      },
-      (args, extra) =>
-        call({ kind: "submit_script", ...args }, extra.http?.authInfo?.token),
-    );
   },
-  { serverInfo: { name: "relay", version: "0.2.0" } },
+  { serverInfo: { name: "relay", version: "0.3.0" } },
 );
 
 const authenticatedHandler = withMcpAuth(

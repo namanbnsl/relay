@@ -14,15 +14,10 @@ export default defineSchema({
   }).index("by_subject", ["subject"]),
   projects: defineTable(projectFields)
     .index("by_owner", ["owner"])
-    .index("by_owner_request", ["owner", "requestId"]),
+    .index("by_owner_name", ["owner", "name"]),
   topics: defineTable(topicFields)
     .index("by_project", ["projectId"])
-    .index("by_project_request", ["projectId", "requestId"]),
-  researchVersions: defineTable(researchFields)
-    .index("by_topic", ["topicId"])
-    .index("by_investigation", ["topicId", "investigationId"])
-    .index("by_request", ["topicId", "requestId"]),
-  scriptVersions: defineTable(scriptFields)
-    .index("by_topic", ["topicId"])
-    .index("by_request", ["topicId", "requestId"]),
+    .index("by_project_title", ["projectId", "title"]),
+  researchVersions: defineTable(researchFields).index("by_topic", ["topicId"]),
+  scriptVersions: defineTable(scriptFields).index("by_topic", ["topicId"]),
 });
