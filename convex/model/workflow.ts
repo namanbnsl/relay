@@ -245,9 +245,9 @@ export async function writeWorkflow(
       .withIndex("by_topic", (q) => q.eq("topicId", topic._id))
       .order("desc")
       .first();
+    await currentApprovedResearch(ctx, source);
     if (latest && scriptContent(latest) === scriptContent(content))
       return saved(latest, topic);
-    await currentApprovedResearch(ctx, source);
     if (command.baseId !== undefined && command.baseId !== latest?._id)
       fail(
         "Script changed while you were editing. Reopen the latest document.",
