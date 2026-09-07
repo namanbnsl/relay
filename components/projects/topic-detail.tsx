@@ -19,6 +19,12 @@ import {
   workspaceSelectClass,
 } from "./workspace-ui";
 
+const runDateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "long",
+  day: "numeric",
+  year: "numeric",
+});
+
 export function TopicDetail({
   topic,
   onChange,
@@ -30,12 +36,12 @@ export function TopicDetail({
   onBack: () => void;
   onNotice: (message: string) => void;
 }) {
-  const [runId, setRunId] = useState(topic.runs.at(-1)?.id ?? null);
+  const [runId, setRunId] = useState(() => topic.runs.at(-1)?.id ?? null);
   const [tab, setTab] = useState<"brief" | "drafts">("brief");
   const [claimId, setClaimId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [summary, setSummary] = useState("");
-  const [outline, setOutline] = useState(topic.outline);
+  const [outline, setOutline] = useState(() => topic.outline);
   const evidenceRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (claimId && window.matchMedia("(max-width: 1279px)").matches) {
@@ -61,11 +67,7 @@ export function TopicDetail({
       id: createWorkspaceId(),
       date: sample
         ? "September 5, 2026"
-        : new Intl.DateTimeFormat("en-US", {
-            month: "long",
-            day: "numeric",
-            year: "numeric",
-          }).format(new Date()),
+        : runDateFormatter.format(new Date()),
       discovery: sample
         ? (discoveries.find((item) => item.id === "permissions") ?? null)
         : null,

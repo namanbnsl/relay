@@ -1,5 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
-import { Project } from "@/components/projects/live-projects";
+import { Suspense } from "react";
+import {
+  Project,
+  ProjectFrame,
+} from "@/components/projects/live-projects";
 export default async function ProjectPage({
   params,
   searchParams,
@@ -9,5 +13,17 @@ export default async function ProjectPage({
 }) {
   await auth.protect();
   const [{ projectId }, { topic }] = await Promise.all([params, searchParams]);
-  return <Project projectId={projectId} initialTopicId={topic} />;
+  return (
+    <Suspense
+      fallback={
+        <ProjectFrame title="Project">
+          <p role="status" className="text-sm text-muted-foreground">
+            Loading project…
+          </p>
+        </ProjectFrame>
+      }
+    >
+      <Project projectId={projectId} initialTopicId={topic} />
+    </Suspense>
+  );
 }

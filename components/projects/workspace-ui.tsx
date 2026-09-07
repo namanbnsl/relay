@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 export const workspacePageClass =
   "mx-auto w-full max-w-[1040px] px-5 py-8 sm:px-10 sm:py-10 lg:px-12";
 export const workspaceSelectClass =
-  "min-h-9 min-w-0 max-w-full rounded-md border border-border-strong bg-background px-2.5 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-[13px]";
+  "min-h-9 min-w-0 max-w-full rounded-md border border-border-strong bg-background px-2.5 text-base outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 focus-visible:ring-offset-0 sm:text-[13px]";
 
 export function WorkspaceHeading({
   title,

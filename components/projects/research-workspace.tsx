@@ -6,7 +6,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { AppShell, type WorkspacePage } from "@/components/app-shell";
 import { TopicDetail } from "./topic-detail";
-import { initialSources } from "./sources-panel";
+import { initialSources } from "./sources-data";
 import {
   createRun,
   discoveries,

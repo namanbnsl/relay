@@ -20,13 +20,13 @@ import {
   MessageSquare,
   Pencil,
   Plus,
-  Search,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/ui/search-input";
 import { Textarea } from "@/components/ui/textarea";
 import { workspacePageClass, WorkspaceHeading } from "./workspace-ui";
 import {
@@ -162,10 +162,6 @@ export function ProjectFrame({
               </span>
             </>
           ) : null}
-          <span className="ms-auto flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-foreground" />
-            Private
-          </span>
         </header>
         <main
           id="project-content"
@@ -210,6 +206,42 @@ export function Projects() {
   const { write, pending, error } = useRelayWrite();
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState("");
+  const projectRows =
+    data?.kind === "projects"
+      ? data.projects.reduce<ReactNode[]>((rows, project) => {
+          if (!project.name.toLowerCase().includes(search.toLowerCase())) {
+            return rows;
+          }
+          rows.push(
+            <Link
+              key={project._id}
+              href={`/projects/${project._id}`}
+              className="workspace-list-row"
+            >
+              <span className="workspace-list-icon">
+                <Folder size={19} strokeWidth={1.5} aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2 className="font-medium break-words">{project.name}</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Created{" "}
+                  {new Date(project._creationTime).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    timeZone: "UTC",
+                  })}
+                </p>
+              </div>
+              <ChevronRight
+                className="text-muted-foreground"
+                size={16}
+                aria-hidden
+              />
+            </Link>,
+          );
+          return rows;
+        }, [])
+      : [];
   return (
     <ProjectFrame title="Projects">
       <WorkspaceHeading
@@ -231,10 +263,7 @@ export function Projects() {
       >
         <form
           className="grid gap-5"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const form = event.currentTarget;
-            const values = new FormData(form);
+          action={async (values) => {
             const result = await write({
               kind: "create_project",
               name: String(values.get("name") ?? ""),
@@ -263,15 +292,13 @@ export function Projects() {
         </form>
         <ErrorMessage error={error} />
       </WorkspaceDialog>
-      <label className="workspace-search">
-        <Search size={15} aria-hidden />
-        <span className="sr-only">Find a project</span>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Find a project…"
-        />
-      </label>
+      <SearchInput
+        className="workspace-search"
+        label="Find a project"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Find a project…"
+      />
       {!data ? (
         <DocumentLoading />
       ) : data.kind === "projects" ? (
@@ -287,41 +314,9 @@ export function Projects() {
               </Button>
             </EmptyDocument>
           ) : (
-            data.projects
-              .filter((project) =>
-                project.name.toLowerCase().includes(search.toLowerCase()),
-              )
-              .map((project) => (
-                <Link
-                  key={project._id}
-                  href={`/projects/${project._id}`}
-                  className="workspace-list-row"
-                >
-                  <span className="workspace-list-icon">
-                    <Folder size={19} strokeWidth={1.5} aria-hidden />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <h2 className="font-medium break-words">{project.name}</h2>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Created{" "}
-                      {new Date(project._creationTime).toLocaleDateString(
-                        undefined,
-                        { month: "short", day: "numeric" },
-                      )}
-                    </p>
-                  </div>
-                  <ChevronRight
-                    className="text-muted-foreground"
-                    size={16}
-                    aria-hidden
-                  />
-                </Link>
-              ))
+            projectRows
           )}
-          {data.projects.length > 0 &&
-          !data.projects.some((project) =>
-            project.name.toLowerCase().includes(search.toLowerCase()),
-          ) ? (
+          {data.projects.length > 0 && projectRows.length === 0 ? (
             <EmptyDocument
               title="No matching projects"
               description="Try a different name or clear your search."
@@ -363,6 +358,34 @@ export function Project({
         <DocumentLoading />
       </ProjectFrame>
     );
+  const topicRows = data.topics.reduce<ReactNode[]>((rows, topic) => {
+    if (
+      !`${topic.title} ${topic.question}`
+        .toLowerCase()
+        .includes(search.toLowerCase())
+    ) {
+      return rows;
+    }
+    rows.push(
+      <Link
+        key={topic._id}
+        href={`/projects/${projectId}?topic=${topic._id}`}
+        className="workspace-list-row"
+      >
+        <span className="workspace-list-icon">
+          <FileText size={18} strokeWidth={1.5} aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="font-medium break-words">{topic.title}</h3>
+          <p className="mt-1 line-clamp-1 text-[13px] text-muted-foreground">
+            {topic.question}
+          </p>
+        </div>
+        <ChevronRight size={16} className="text-muted-foreground" aria-hidden />
+      </Link>,
+    );
+    return rows;
+  }, []);
   return (
     <ProjectFrame title={data.project.name}>
       {selected ? (
@@ -393,9 +416,7 @@ export function Project({
           >
             <form
               className="grid gap-5"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                const values = new FormData(event.currentTarget);
+              action={async (values) => {
                 const result = await write({
                   kind: "create_topic",
                   projectId,
@@ -441,46 +462,17 @@ export function Project({
                 {data.topics.length}
               </span>
             </h2>
-            <label className="workspace-search !mb-0">
-              <Search size={15} aria-hidden />
-              <span className="sr-only">Find a topic</span>
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Find a topic…"
-              />
-            </label>
+            <SearchInput
+              className="workspace-search !mb-0"
+              label="Find a topic"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Find a topic…"
+            />
           </div>
           <div className="divide-y divide-border">
             {data.topics.length ? (
-              data.topics
-                .filter((topic) =>
-                  `${topic.title} ${topic.question}`
-                    .toLowerCase()
-                    .includes(search.toLowerCase()),
-                )
-                .map((topic) => (
-                  <Link
-                    key={topic._id}
-                    href={`/projects/${projectId}?topic=${topic._id}`}
-                    className="workspace-list-row"
-                  >
-                    <span className="workspace-list-icon">
-                      <FileText size={18} strokeWidth={1.5} aria-hidden />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-medium break-words">{topic.title}</h3>
-                      <p className="mt-1 line-clamp-1 text-[13px] text-muted-foreground">
-                        {topic.question}
-                      </p>
-                    </div>
-                    <ChevronRight
-                      size={16}
-                      className="text-muted-foreground"
-                      aria-hidden
-                    />
-                  </Link>
-                ))
+              topicRows
             ) : (
               <EmptyDocument
                 title="What will you explore?"
@@ -492,12 +484,7 @@ export function Project({
                 </Button>
               </EmptyDocument>
             )}
-            {data.topics.length > 0 &&
-            !data.topics.some((topic) =>
-              `${topic.title} ${topic.question}`
-                .toLowerCase()
-                .includes(search.toLowerCase()),
-            ) ? (
+            {data.topics.length > 0 && topicRows.length === 0 ? (
               <EmptyDocument
                 title="No matching topics"
                 description="Try another search or start a new topic."
@@ -569,98 +556,152 @@ function Topic({
             </button>
           ))}
         </nav>
-        <WorkspaceDialog
-          title="Document history"
-          description="Recent versions, with their original sources and review decisions."
-          trigger={
-            <Button variant="ghost" size="sm" aria-label="Document history">
-              <History aria-hidden />
-              <span className="hidden sm:inline">History</span>
-            </Button>
-          }
-        >
-          <div className="space-y-3">
-            {(tab === "research" ? data.research : data.scripts).map((row) => (
-              <details
-                key={row._id}
-                className="rounded-lg border border-border p-4"
-              >
-                <summary className="cursor-pointer text-sm">
-                  {new Date(row._creationTime).toLocaleString()} ·{" "}
-                  {reviewLabel(row.review)}
-                </summary>
-                <div className="mt-5">
-                  {"summary" in row ? (
-                    <Research row={row} readOnly />
-                  ) : (
-                    <>
-                      <h3 className="mb-3 font-medium">{row.title}</h3>
-                      {row.scenes.map((scene, i) => (
-                        <div key={i} className="mb-5">
-                          <p className="text-sm leading-7">{scene.narration}</p>
-                          <p className="mt-2 text-xs leading-6 text-muted-foreground">
-                            {scene.visual}
-                          </p>
-                        </div>
-                      ))}
-                    </>
-                  )}
-                </div>
-              </details>
-            ))}
-            {(tab === "research" ? data.research : data.scripts).length ===
-            0 ? (
-              <p className="text-sm text-muted-foreground">
-                Saved versions will appear here.
-              </p>
-            ) : null}
-          </div>
-        </WorkspaceDialog>
+        <TopicHistory
+          tab={tab}
+          research={data.research}
+          scripts={data.scripts}
+        />
       </div>
-      <div className="workspace-document">
-        {tab === "research" ? (
-          latest ? (
-            <Research row={latest} />
-          ) : (
-            <EmptyDocument
-              title="Ready for a little discovery"
-              description="Ask your connected agent to investigate this question. Review the findings here when they’re ready."
-            >
-              <AgentPrompt
-                prompt={`Find the Relay topic “${data.topic.title}”. Research its question, save findings with supporting sources to Relay, and stop for my review.`}
-              />
-            </EmptyDocument>
-          )
-        ) : script ? (
-          <Script row={script} research={data.research} />
-        ) : (
-          <EmptyDocument
-            title={
-              latest?.review.kind === "approved"
-                ? "Your research is ready to become a story"
-                : "Research comes first"
-            }
-            description={
-              latest?.review.kind === "approved"
-                ? "Ask your agent to turn the approved findings into narration and a visual plan."
-                : "Review and approve the research, then build your script on a solid foundation."
-            }
-          >
-            {latest?.review.kind === "approved" ? (
-              <AgentPrompt
-                prompt={`Read the current approved research for the Relay topic “${data.topic.title}”. Write and save a video script with narration and a visual plan for each scene. Stop for my review.`}
-              />
-            ) : (
-              <Button variant="outline" onClick={() => setTab("research")}>
-                View research
-                <ChevronRight aria-hidden />
-              </Button>
-            )}
-          </EmptyDocument>
-        )}
-      </div>
+      <TopicDocument
+        tab={tab}
+        latest={latest}
+        script={script}
+        data={data}
+        onViewResearch={() => setTab("research")}
+      />
     </>
   );
+}
+type TopicData = {
+  topic: Doc<"topics">;
+  research: Doc<"researchVersions">[];
+  scripts: Doc<"scriptVersions">[];
+};
+function TopicHistory({
+  tab,
+  research,
+  scripts,
+}: Pick<TopicData, "research" | "scripts"> & {
+  tab: "research" | "script";
+}) {
+  const rows = tab === "research" ? research : scripts;
+  return (
+    <WorkspaceDialog
+      title="Document history"
+      description="Recent versions, with their original sources and review decisions."
+      trigger={
+        <Button variant="ghost" size="sm" aria-label="Document history">
+          <History aria-hidden />
+          <span className="hidden sm:inline">History</span>
+        </Button>
+      }
+    >
+      <div className="space-y-3">
+        {rows.map((row) => (
+          <details
+            key={row._id}
+            className="rounded-lg border border-border p-4"
+          >
+            <summary className="cursor-pointer text-sm">
+              {new Date(row._creationTime).toLocaleString("en-US", {
+                timeZone: "UTC",
+              })}{" "}
+              · {reviewLabel(row.review)}
+            </summary>
+            <div className="mt-5">
+              {"summary" in row ? (
+                <Research row={row} readOnly />
+              ) : (
+                <>
+                  <h3 className="mb-3 font-medium">{row.title}</h3>
+                  {row.scenes.map((scene) => (
+                    <div key={sceneKey(scene)} className="mb-5">
+                      <p className="text-sm leading-7">{scene.narration}</p>
+                      <p className="mt-2 text-xs leading-6 text-muted-foreground">
+                        {scene.visual}
+                      </p>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </details>
+        ))}
+        {rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Saved versions will appear here.
+          </p>
+        ) : null}
+      </div>
+    </WorkspaceDialog>
+  );
+}
+function TopicDocument({
+  tab,
+  latest,
+  script,
+  data,
+  onViewResearch,
+}: {
+  tab: "research" | "script";
+  latest: Doc<"researchVersions"> | undefined;
+  script: Doc<"scriptVersions"> | undefined;
+  data: TopicData;
+  onViewResearch: () => void;
+}) {
+  return (
+    <div className="workspace-document">
+      {tab === "research" ? (
+        latest ? (
+          <Research row={latest} />
+        ) : (
+          <EmptyDocument
+            title="Ready for a little discovery"
+            description="Ask your connected agent to investigate this question. Review the findings here when they’re ready."
+          >
+            <AgentPrompt
+              prompt={`Find the Relay topic “${data.topic.title}”. Research its question, save findings with supporting sources to Relay, and stop for my review.`}
+            />
+          </EmptyDocument>
+        )
+      ) : script ? (
+        <ScriptDocument row={script} research={data.research} />
+      ) : (
+        <EmptyDocument
+          title={
+            latest?.review.kind === "approved"
+              ? "Your research is ready to become a story"
+              : "Research comes first"
+          }
+          description={
+            latest?.review.kind === "approved"
+              ? "Ask your agent to turn the approved findings into narration and a visual plan."
+              : "Review and approve the research, then build your script on a solid foundation."
+          }
+        >
+          {latest?.review.kind === "approved" ? (
+            <AgentPrompt
+              prompt={`Read the current approved research for the Relay topic “${data.topic.title}”. Write and save a video script with narration and a visual plan for each scene. Stop for my review.`}
+            />
+          ) : (
+            <Button variant="outline" onClick={onViewResearch}>
+              View research
+              <ChevronRight aria-hidden />
+            </Button>
+          )}
+        </EmptyDocument>
+      )}
+    </div>
+  );
+}
+function sceneKey(scene: { narration: string; visual: string }) {
+  return `${scene.narration}\u0000${scene.visual}`;
+}
+function claimKey(claim: unknown) {
+  return JSON.stringify(claim);
+}
+function sourceKey(source: unknown) {
+  return JSON.stringify(source);
 }
 function reviewLabel(review: Doc<"researchVersions">["review"]) {
   switch (review.kind) {
@@ -733,8 +774,7 @@ function Review({
             }
           >
             <form
-              onSubmit={async (e) => {
-                e.preventDefault();
+              action={async () => {
                 const result = await write({
                   kind:
                     kind === "research" ? "review_research" : "review_script",
@@ -823,8 +863,7 @@ function Research({
       {editing ? (
         <form
           className="grid gap-6"
-          onSubmit={async (e) => {
-            e.preventDefault();
+          action={async () => {
             const result = await write({
               kind: "save_research",
               topicId: row.topicId,
@@ -848,7 +887,10 @@ function Research({
             />
           </Field>
           {claims.map((claim, index) => (
-            <div key={index} className="grid gap-4 border-t border-border pt-5">
+            <div
+              key={claimKey(claim)}
+              className="grid gap-4 border-t border-border pt-5"
+            >
               <Field label={`Finding ${index + 1}`}>
                 <Textarea
                   value={claim.text}
@@ -932,7 +974,7 @@ function Research({
           </h2>
           <div className="space-y-2">
             {row.claims.map((claim, index) => (
-              <article key={index} className="relative py-5 ps-9">
+              <article key={claimKey(claim)} className="relative py-5 ps-9">
                 <span className="absolute start-0 top-6 text-xs tabular-nums text-muted-foreground">
                   {String(index + 1).padStart(2, "0")}
                 </span>
@@ -970,8 +1012,11 @@ function Research({
                         this finding.
                       </p>
                     ) : null}
-                    {claim.evidence.map((source, i) => (
-                      <div key={i} className="mt-6 border-t border-border pt-5">
+                    {claim.evidence.map((source) => (
+                      <div
+                        key={sourceKey(source)}
+                        className="mt-6 border-t border-border pt-5"
+                      >
                         <a
                           href={source.url}
                           target="_blank"
@@ -987,7 +1032,7 @@ function Research({
                           Agent-supplied
                           {source.retrievedAt === undefined
                             ? ""
-                            : ` · Retrieved ${new Date(source.retrievedAt).toLocaleDateString()}`}
+                            : ` · Retrieved ${new Date(source.retrievedAt).toLocaleDateString("en-US", { timeZone: "UTC" })}`}
                         </p>
                       </div>
                     ))}
@@ -1028,7 +1073,7 @@ function Research({
     </section>
   );
 }
-function Script({
+function ScriptDocument({
   row,
   research,
 }: {
@@ -1100,8 +1145,7 @@ function Script({
       {editing ? (
         <form
           className="grid gap-5"
-          onSubmit={async (e) => {
-            e.preventDefault();
+          action={async () => {
             const result = await write({
               kind: "save_script",
               researchVersionId: row.researchVersionId,
@@ -1121,7 +1165,10 @@ function Script({
             />
           </Field>
           {scenes.map((scene, index) => (
-            <div key={index} className="grid gap-4 border-t border-border pt-5">
+            <div
+              key={sceneKey(scene)}
+              className="grid gap-4 border-t border-border pt-5"
+            >
               <Field label={`Scene ${index + 1} narration`}>
                 <Textarea
                   required
@@ -1181,7 +1228,7 @@ function Script({
         <>
           <h2 className="text-lg font-semibold">{row.title}</h2>
           {row.scenes.map((scene, index) => (
-            <article className="mt-6" key={index}>
+            <article className="mt-6" key={sceneKey(scene)}>
               <h3 className="mb-2 text-xs text-muted-foreground">
                 Scene {index + 1}
               </h3>

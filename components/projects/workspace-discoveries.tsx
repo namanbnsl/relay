@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowRight, ChevronRight, Search, X } from "lucide-react";
+import { ArrowRight, ChevronRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/ui/search-input";
 import { ViewButton } from "./workspace-ui";
 import { discoveries, type Discovery, type Topic } from "./workspace-model";
 
@@ -17,7 +17,7 @@ export function DiscoveriesPage({ topics, dismissed, used, query, filter, attach
   return <>
     <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b border-border pb-0">
       <div className="flex gap-6" aria-label="Filter discoveries">{["all", "Development", "Research idea"].map((value) => <ViewButton key={value} active={filter === value} onClick={() => onFilterChange(value)}>{value === "all" ? "All" : value === "Development" ? "Developments" : "Ideas"}</ViewButton>)}</div>
-      <div className="relative mb-2 w-full sm:mb-0 sm:w-48"><Search className="absolute start-2.5 top-2.5 size-3.5 text-muted-foreground" strokeWidth={1.5} aria-hidden="true" /><Input className="border-transparent ps-8 shadow-none hover:border-border-strong" aria-label="Search discoveries" placeholder="Search" value={query} onChange={(event) => onQueryChange(event.target.value)} /></div>
+      <SearchInput className="workspace-search mb-2 w-full sm:mb-0 sm:w-48" label="Search discoveries" placeholder="Search" value={query} onChange={(event) => onQueryChange(event.target.value)} />
     </div>
     <section aria-label="Discoveries">{visible.map((item) => <article key={item.id} className="border-b border-border py-7">
       <h2 className="max-w-[680px] text-base font-semibold leading-6 tracking-[-0.015em]">{item.title}</h2><p className="mt-2 max-w-[680px] text-[13px] leading-6 text-muted-foreground">{item.summary}</p>

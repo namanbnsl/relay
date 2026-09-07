@@ -9,8 +9,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "doctor": "npx react-doctor@latest",
-    "test": "vitest run"
+    "doctor": "npx react-doctor@latest"
   },
   "dependencies": {
     "@clerk/backend": "^3.17.1",
@@ -40,7 +39,6 @@
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.3.4",
     "tailwindcss": "^4.3.3",
-    "typescript": "^5.9.0",
-    "vitest": "^5.0.0"
+    "typescript": "^5.9.0"
   }
 }

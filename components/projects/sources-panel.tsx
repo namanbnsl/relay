@@ -7,27 +7,7 @@ import { ArrowUpRight, Globe2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WorkspaceHeading } from "./workspace-ui";
-
-export type ReadingSource = {
-  id: string;
-  name: string;
-  url: string;
-  enabled: boolean;
-};
-export const initialSources: ReadingSource[] = [
-  {
-    id: "github",
-    name: "GitHub Blog",
-    url: "https://github.blog/",
-    enabled: true,
-  },
-  {
-    id: "anthropic",
-    name: "Anthropic News",
-    url: "https://www.anthropic.com/news",
-    enabled: true,
-  },
-];
+import type { ReadingSource } from "./sources-data";
 const suggestions = [
   {
     id: "huggingface",
@@ -71,10 +51,8 @@ export function SourcesPanel({
         {adding ? (
           <form
             className="mb-7 grid max-w-xl gap-5 border-b border-border pb-7"
-            onSubmit={(event) => {
-              event.preventDefault();
+            action={(data) => {
               setError("");
-              const data = new FormData(event.currentTarget);
               const name = String(data.get("name") ?? "").trim();
               const raw = String(data.get("url") ?? "").trim();
               let url: URL;
