@@ -1,0 +1,49 @@
+import { v } from "convex/values";
+import {
+  query,
+  mutation,
+  internalQuery,
+  internalMutation,
+} from "./_generated/server";
+import { requireIdentity } from "./model/auth";
+import { readWorkflow, writeWorkflow } from "./model/workflow";
+import {
+  readCommand,
+  readResult,
+  writeCommand,
+  writeResult,
+} from "./model/validators";
+
+export const read = query({
+  args: { command: readCommand },
+  returns: readResult,
+  handler: async (ctx, { command }) =>
+    readWorkflow(
+      ctx,
+      { subject: (await requireIdentity(ctx)).subject, channel: "web" },
+      command,
+    ),
+});
+export const write = mutation({
+  args: { command: writeCommand },
+  returns: writeResult,
+  handler: async (ctx, { command }) =>
+    writeWorkflow(
+      ctx,
+      { subject: (await requireIdentity(ctx)).subject, channel: "web" },
+      command,
+    ),
+});
+// Only the OAuth-verifying action can supply identity to these internal functions.
+export const readFromMcp = internalQuery({
+  args: { subject: v.string(), command: readCommand },
+  returns: readResult,
+  handler: async (ctx, { subject, command }) =>
+    readWorkflow(ctx, { subject, channel: "mcp" }, command),
+});
+export const writeFromMcp = internalMutation({
+  args: { subject: v.string(), command: writeCommand },
+  returns: writeResult,
+  handler: async (ctx, { subject, command }) =>
+    writeWorkflow(ctx, { subject, channel: "mcp" }, command),
+});

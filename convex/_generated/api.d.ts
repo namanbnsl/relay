@@ -8,9 +8,11 @@
  * @module
  */
 
+import type * as mcp from "../mcp.js";
 import type * as model_auth from "../model/auth.js";
-import type * as secrets from "../secrets.js";
-import type * as seed from "../seed.js";
+import type * as model_validators from "../model/validators.js";
+import type * as model_workflow from "../model/workflow.js";
+import type * as relay from "../relay.js";
 import type * as users from "../users.js";
 
 import type {
@@ -20,9 +22,11 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  mcp: typeof mcp;
   "model/auth": typeof model_auth;
-  secrets: typeof secrets;
-  seed: typeof seed;
+  "model/validators": typeof model_validators;
+  "model/workflow": typeof model_workflow;
+  relay: typeof relay;
   users: typeof users;
 }>;
 

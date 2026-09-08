@@ -4,6 +4,8 @@ import { IBM_Plex_Mono, Instrument_Sans } from "next/font/google";
 
 import { ClerkProvider } from "@clerk/nextjs";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
+import { Toaster } from "@/components/ui/toast";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { Analytics } from "@vercel/analytics/next";
 
@@ -32,12 +34,16 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-scroll-behavior="smooth"
       className={`${instrumentSans.variable} ${ibmPlexMono.variable}`}
     >
       <body>
         <ClerkProvider>
-          <ConvexClientProvider>{children}</ConvexClientProvider>
+          <ConvexClientProvider>
+            <TooltipProvider>{children}</TooltipProvider>
+          </ConvexClientProvider>
         </ClerkProvider>
+        <Toaster />
         <Analytics />
       </body>
     </html>
