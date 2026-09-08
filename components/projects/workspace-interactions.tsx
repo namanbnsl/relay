@@ -1,19 +1,23 @@
 "use client";
 
 import {
-  createContext,
-  useContext,
   useEffect,
   useRef,
   useState,
+  type ReactElement,
   type ReactNode,
 } from "react";
-import { Dialog } from "radix-ui";
 import { Check, Copy, X, ArrowUpRight, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-const FeedbackContext = createContext<(message: string) => void>(() => {});
-export const useFeedback = () => useContext(FeedbackContext);
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { toast } from "@/components/ui/toast-manager";
 
 export function useDraftProtection(dirty: boolean) {
   useEffect(() => {
@@ -43,37 +47,6 @@ export function useDraftProtection(dirty: boolean) {
   }, [dirty]);
 }
 
-export function WorkspaceFeedbackProvider({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  const [message, setMessage] = useState("");
-  return (
-    <FeedbackContext.Provider value={setMessage}>
-      {children}
-      <div
-        className="workspace-toast research-workspace"
-        role="status"
-        aria-live="polite"
-      >
-        {message ? (
-          <>
-            <Check size={16} aria-hidden />
-            <span>{message}</span>
-            <button
-              aria-label="Dismiss notification"
-              onClick={() => setMessage("")}
-            >
-              <X size={15} aria-hidden />
-            </button>
-          </>
-        ) : null}
-      </div>
-    </FeedbackContext.Provider>
-  );
-}
-
 export function WorkspaceDialog({
   title,
   description,
@@ -84,67 +57,63 @@ export function WorkspaceDialog({
 }: {
   title: string;
   description: string;
-  trigger: ReactNode;
+  trigger: ReactElement;
   children: ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
   const returnFocus = useRef<HTMLElement | null>(null);
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>
-      <Dialog.Portal>
-        <Dialog.Overlay className="workspace-overlay" />
-        <Dialog.Content
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) {
+          returnFocus.current =
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement
+              : null;
+        }
+        onOpenChange?.(nextOpen);
+      }}
+    >
+      <DialogTrigger render={trigger} />
+        <DialogContent
+          showCloseButton={false}
           className="workspace-dialog research-workspace"
-          onOpenAutoFocus={(event) => {
-            returnFocus.current =
-              document.activeElement instanceof HTMLElement
-                ? document.activeElement
-                : null;
-            const field =
-              event.target instanceof HTMLElement
-                ? event.target.querySelector("input, textarea")
-                : null;
-            if (field instanceof HTMLElement) {
-              event.preventDefault();
-              field.focus();
-            }
-          }}
-          onCloseAutoFocus={(event) => {
-            if (returnFocus.current?.isConnected) {
-              event.preventDefault();
-              returnFocus.current.focus();
-            }
-          }}
+          initialFocus={() =>
+            document.querySelector<HTMLElement>(
+              ".workspace-dialog input, .workspace-dialog textarea",
+            )
+          }
+          finalFocus={() =>
+            returnFocus.current?.isConnected ? returnFocus.current : null
+          }
         >
           <div className="pe-8">
-            <Dialog.Title className="text-lg font-semibold tracking-tight">
+            <DialogTitle className="text-lg font-semibold tracking-tight">
               {title}
-            </Dialog.Title>
-            <Dialog.Description className="mt-2 text-sm leading-6 text-muted-foreground">
+            </DialogTitle>
+            <DialogDescription className="mt-2 text-sm leading-6 text-muted-foreground">
               {description}
-            </Dialog.Description>
+            </DialogDescription>
           </div>
-          <Dialog.Close asChild>
-            <Button
+          <DialogClose
+            render={<Button
               variant="ghost"
               size="icon"
               className="absolute end-4 top-4"
               aria-label="Close dialog"
-            >
+            />}
+          >
               <X aria-hidden />
-            </Button>
-          </Dialog.Close>
+          </DialogClose>
           <div className="mt-6">{children}</div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+        </DialogContent>
+    </Dialog>
   );
 }
 
 export function AgentPrompt({ prompt }: { prompt: string }) {
-  const notify = useFeedback();
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   return (
@@ -167,7 +136,10 @@ export function AgentPrompt({ prompt }: { prompt: string }) {
             try {
               await navigator.clipboard.writeText(prompt);
               setCopied(true);
-              notify("Prompt copied. Paste it into your agent.");
+              toast.add({
+                title: "Prompt copied. Paste it into your agent.",
+                type: "success",
+              });
             } catch {
               setError("Select the prompt above and copy it to your agent.");
             }

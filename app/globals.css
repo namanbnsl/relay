@@ -44,6 +44,8 @@
 
 :root {
   color-scheme: light;
+  --motion-duration: 150ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
   --background: #ffffff;
   --foreground: #20221d;
   --card: #ffffff;
@@ -177,9 +179,11 @@
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
   }
 }
 
@@ -366,18 +370,7 @@
 .workspace-review > p {
   flex-basis: 100%;
 }
-.workspace-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  background: #00000035;
-}
 .workspace-dialog {
-  position: fixed;
-  z-index: 61;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
   width: min(600px, calc(100vw - 32px));
   max-height: calc(100svh - 48px);
   overflow-y: auto;
@@ -389,46 +382,14 @@
     0 24px 80px #00000020,
     0 4px 16px #0000000a;
 }
-.workspace-toast {
-  position: fixed;
-  z-index: 80;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: max-content;
-  max-width: calc(100vw - 32px);
-  border-radius: 10px;
-  font-size: 13px;
-}
-.workspace-toast:not(:empty) {
-  padding: 8px 10px 8px 16px;
-  border: 1px solid var(--border-strong);
-  box-shadow: 0 8px 30px #00000012;
-}
-.workspace-toast > svg {
-  flex-shrink: 0;
-}
-.workspace-toast button {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border-radius: 5px;
-}
 .workspace-shell :is(a, button, summary):focus-visible,
-.workspace-dialog :is(button, summary):focus-visible,
-.workspace-toast button:focus-visible {
+.workspace-dialog :is(button, summary):focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 3px;
 }
 @media (hover: hover) {
   .workspace-list-row:hover,
-  .workspace-nav-item:hover,
-  .workspace-toast button:hover {
+  .workspace-nav-item:hover {
     background: var(--surface-subtle);
     color: var(--foreground);
   }
@@ -437,12 +398,8 @@
   .workspace-list-row,
   .workspace-nav-item {
     transition:
-      background-color 120ms ease,
-      color 120ms ease;
-  }
-  .workspace-shell [data-slot="button"]:active,
-  .workspace-dialog [data-slot="button"]:active {
-    scale: 0.96;
+      background-color var(--motion-duration) var(--motion-ease),
+      color var(--motion-duration) var(--motion-ease);
   }
 }
 @media (max-width: 760px) {

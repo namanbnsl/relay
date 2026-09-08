@@ -5,7 +5,7 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import type { FunctionArgs } from "convex/server";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -28,19 +28,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchInput } from "@/components/ui/search-input";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/components/ui/toast-manager";
 import { workspacePageClass, WorkspaceHeading } from "./workspace-ui";
 import {
   AgentPrompt,
   DocumentLoading,
   EmptyDocument,
   WorkspaceDialog,
-  useFeedback,
   useDraftProtection,
 } from "./workspace-interactions";
 
 type Command = FunctionArgs<typeof api.relay.write>["command"];
 export function useRelayWrite() {
-  const notify = useFeedback();
   const mutate = useMutation(api.relay.write);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -49,8 +48,9 @@ export function useRelayWrite() {
     setError("");
     try {
       const result = await mutate({ command });
-      notify(
-        command.kind === "create_project"
+      toast.add({
+        title:
+          command.kind === "create_project"
           ? "Project created"
           : command.kind === "create_topic"
             ? "Topic created"
@@ -60,7 +60,8 @@ export function useRelayWrite() {
                 ? "Approved. Your decision is saved."
                 : "Feedback sent. Your agent can read it in Relay."
               : "Changes saved. Ready for review.",
-      );
+        type: "success",
+      });
       return result;
     } catch (error) {
       setError(
@@ -333,10 +334,8 @@ export function Projects() {
 }
 export function Project({
   projectId,
-  initialTopicId,
 }: {
   projectId: string;
-  initialTopicId?: string;
 }) {
   const { isAuthenticated } = useConvexAuth();
   const data = useQuery(
@@ -344,11 +343,14 @@ export function Project({
     isAuthenticated ? { command: { kind: "project", projectId } } : "skip",
   );
   const { write, pending, error } = useRelayWrite();
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const selected = searchParams.get("topic") ?? initialTopicId ?? "";
+  const selected = searchParams.get("topic") ?? "";
   function setSelected(topicId: string) {
-    router.push(`/projects/${projectId}${topicId ? `?topic=${topicId}` : ""}`);
+    const params = new URLSearchParams(searchParams.toString());
+    if (topicId) params.set("topic", topicId);
+    else params.delete("topic");
+    const query = params.toString();
+    window.history.pushState(null, "", `/projects/${projectId}${query ? `?${query}` : ""}`);
   }
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState("");
@@ -358,11 +360,12 @@ export function Project({
         <DocumentLoading />
       </ProjectFrame>
     );
-  const topicRows = data.topics.reduce<ReactNode[]>((rows, topic) => {
+  const normalizedSearch = search.toLowerCase();
+  const topicRows = selected ? [] : data.topics.reduce<ReactNode[]>((rows, topic) => {
     if (
       !`${topic.title} ${topic.question}`
         .toLowerCase()
-        .includes(search.toLowerCase())
+        .includes(normalizedSearch)
     ) {
       return rows;
     }
@@ -370,6 +373,11 @@ export function Project({
       <Link
         key={topic._id}
         href={`/projects/${projectId}?topic=${topic._id}`}
+        prefetch={false}
+        onNavigate={(event) => {
+          event.preventDefault();
+          setSelected(topic._id);
+        }}
         className="workspace-list-row"
       >
         <span className="workspace-list-icon">

@@ -6,13 +6,11 @@ import {
 } from "@/components/projects/live-projects";
 export default async function ProjectPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ topic?: string }>;
 }) {
   await auth.protect();
-  const [{ projectId }, { topic }] = await Promise.all([params, searchParams]);
+  const { projectId } = await params;
   return (
     <Suspense
       fallback={
@@ -23,7 +21,7 @@ export default async function ProjectPage({
         </ProjectFrame>
       }
     >
-      <Project projectId={projectId} initialTopicId={topic} />
+      <Project projectId={projectId} />
     </Suspense>
   );
 }

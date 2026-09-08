@@ -15,19 +15,23 @@ async function verify(token: string) {
   if (!secretKey)
     throw new ConvexError("MCP database authentication is not configured.");
   const clerk = createClerkClient({ secretKey });
+
+  let verified: Awaited<ReturnType<typeof clerk.idPOAuthAccessToken.verify>>;
   try {
-    const verified = await clerk.idPOAuthAccessToken.verify(token);
-    if (
-      verified.revoked ||
-      verified.expired ||
-      !verified.subject.startsWith("user_") ||
-      !verified.scopes.includes("openid")
-    )
-      throw new Error("Invalid OAuth grant");
-    return verified.subject;
-  } catch {
-    throw new ConvexError("Unauthenticated");
+    verified = await clerk.idPOAuthAccessToken.verify(token);
+  } catch (cause) {
+    console.error("Clerk OAuth access token verification failed", cause);
+    throw new Error("OAuth token verification failed", { cause });
   }
+
+  if (
+    verified.revoked ||
+    verified.expired ||
+    !verified.subject.startsWith("user_") ||
+    !verified.scopes.includes("openid")
+  )
+    throw new ConvexError("Unauthenticated");
+  return verified.subject;
 }
 export const read = action({
   args: { token: v.string(), command: readCommand },
