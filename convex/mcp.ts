@@ -1,4 +1,12 @@
 "use node";
+import type { readOwned, writeOwned } from "./research";
+import {
+  readResearchCommand,
+  writeResearchCommand,
+  researchReadResult,
+  publicRunResult,
+  connectionTestResult,
+} from "./model/researchContracts";
 import { createClerkClient } from "@clerk/backend";
 import { ConvexError, v, type Infer } from "convex/values";
 import { action } from "./_generated/server";
@@ -19,9 +27,8 @@ async function verify(token: string) {
   let verified: Awaited<ReturnType<typeof clerk.idPOAuthAccessToken.verify>>;
   try {
     verified = await clerk.idPOAuthAccessToken.verify(token);
-  } catch (cause) {
-    console.error("Clerk OAuth access token verification failed", cause);
-    throw new Error("OAuth token verification failed", { cause });
+  } catch {
+    throw new ConvexError("OAuth token verification failed");
   }
 
   if (
@@ -36,11 +43,21 @@ async function verify(token: string) {
 export const read = action({
   args: { token: v.string(), command: readCommand },
   returns: readResult,
-  handler: async (ctx, { token, command }): Promise<Infer<typeof readResult>> =>
-    ctx.runQuery(internal.relay.readFromMcp, {
-      subject: await verify(token),
+  handler: async (
+    ctx,
+    { token, command },
+  ): Promise<Infer<typeof readResult>> => {
+    const subject = await verify(token);
+    const result = await ctx.runQuery(internal.relay.readFromMcp, {
+      subject,
       command,
-    }),
+    });
+    await ctx.runMutation(internal.mcpActivity.recordSuccess, {
+      subject,
+      operation: "read",
+    });
+    return result;
+  },
 });
 export const write = action({
   args: { token: v.string(), command: writeCommand },
@@ -48,9 +65,75 @@ export const write = action({
   handler: async (
     ctx,
     { token, command },
-  ): Promise<Infer<typeof writeResult>> =>
-    ctx.runMutation(internal.relay.writeFromMcp, {
-      subject: await verify(token),
+  ): Promise<Infer<typeof writeResult>> => {
+    const subject = await verify(token);
+    const result = await ctx.runMutation(internal.relay.writeFromMcp, {
+      subject,
       command,
+    });
+    await ctx.runMutation(internal.mcpActivity.recordSuccess, {
+      subject,
+      operation: "write",
+    });
+    return result;
+  },
+});
+
+export const researchRead = action({
+  args: { token: v.string(), command: readResearchCommand },
+  returns: researchReadResult,
+  handler: async (
+    ctx,
+    { token, command },
+  ): Promise<Awaited<ReturnType<typeof readOwned>>> => {
+    const subject = await verify(token);
+    const result = await ctx.runQuery(internal.research.readFromMcp, {
+      subject,
+      command,
+    });
+    await ctx.runMutation(internal.mcpActivity.recordSuccess, {
+      subject,
+      operation: "read",
+    });
+    return result;
+  },
+});
+export const researchWrite = action({
+  args: { token: v.string(), command: writeResearchCommand },
+  returns: publicRunResult,
+  handler: async (
+    ctx,
+    { token, command },
+  ): Promise<Awaited<ReturnType<typeof writeOwned>>> => {
+    const subject = await verify(token);
+    const result = await ctx.runMutation(internal.research.writeFromMcp, {
+      subject,
+      command,
+    });
+    await ctx.runMutation(internal.mcpActivity.recordSuccess, {
+      subject,
+      operation: "write",
+    });
+    return result;
+  },
+});
+
+export const testConnection = action({
+  returns: connectionTestResult,
+  args: {
+    token: v.string(),
+    operation: v.union(v.literal("create"), v.literal("remove")),
+  },
+  handler: async (
+    ctx,
+    { token, operation },
+  ): Promise<{
+    testMarker: { id: string; createdAt: number } | null;
+    removed: boolean;
+    path: string;
+  }> =>
+    ctx.runMutation(internal.mcpActivity.testFromMcp, {
+      subject: await verify(token),
+      operation,
     }),
 });

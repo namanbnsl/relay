@@ -19,7 +19,7 @@ export async function projectFor(ctx: Reader, subject: string, value: string) {
   if (!project || project.owner !== subject) fail("Project not found.");
   return project;
 }
-async function topicFor(ctx: Reader, subject: string, value: string) {
+export async function topicFor(ctx: Reader, subject: string, value: string) {
   const id = ctx.db.normalizeId("topics", value);
   const topic = id ? await ctx.db.get(id) : null;
   if (!topic) fail("Topic not found.");

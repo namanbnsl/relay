@@ -7,7 +7,33 @@ import {
   scriptFields,
 } from "./model/validators";
 
+import {
+  runFields,
+  packetFields,
+  evidenceFields,
+  plan,
+} from "./model/researchContracts";
+
 export default defineSchema({
+  researchRequests: defineTable({
+    owner: v.string(),
+    requestKey: v.string(),
+    topicId: v.id("topics"),
+    plan: v.optional(plan),
+    runId: v.id("researchRuns"),
+  }).index("by_request", ["owner", "requestKey"]),
+  mcpConnections: defineTable({
+    subject: v.string(),
+    lastSuccessfulReadAt: v.optional(v.number()),
+    lastSuccessfulWriteAt: v.optional(v.number()),
+    testCreatedAt: v.optional(v.number()),
+  }).index("by_subject", ["subject"]),
+  researchRuns: defineTable(runFields)
+    .index("by_topic", ["topicId"])
+    .index("by_request", ["owner", "requestKey"])
+    .index("by_topic_occupied", ["topicId", "occupied"]),
+  researchPackets: defineTable(packetFields).index("by_run", ["runId"]),
+  researchEvidence: defineTable(evidenceFields).index("by_run", ["runId"]),
   users: defineTable({
     subject: v.string(),
     name: v.union(v.string(), v.null()),

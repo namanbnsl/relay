@@ -1,4 +1,5 @@
 "use client";
+import { ResearchExecution } from "./research-execution";
 
 import { UserButton } from "@clerk/nextjs";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
@@ -570,6 +571,7 @@ function Topic({
           scripts={data.scripts}
         />
       </div>
+      {tab === "research" ? <ResearchExecution key={topicId} topicId={topicId} /> : null}
       <TopicDocument
         tab={tab}
         latest={latest}
