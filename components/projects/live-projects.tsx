@@ -1,11 +1,11 @@
 "use client";
+import { ResearchExecution } from "./research-execution";
 
-import { UserButton } from "@clerk/nextjs";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import type { FunctionArgs } from "convex/server";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -21,15 +21,23 @@ import {
   Pencil,
   Plus,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import {
+  cloneElement,
+  useId,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchInput } from "@/components/ui/search-input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast-manager";
-import { workspacePageClass, WorkspaceHeading } from "./workspace-ui";
+import { workspaceSelectClass, WorkspaceHeading } from "./workspace-ui";
 import {
   AgentPrompt,
   DocumentLoading,
@@ -37,6 +45,9 @@ import {
   WorkspaceDialog,
   useDraftProtection,
 } from "./workspace-interactions";
+
+import { ProjectFrame } from "./project-frame";
+export { ProjectFrame } from "./project-frame";
 
 type Command = FunctionArgs<typeof api.relay.write>["command"];
 export function useRelayWrite() {
@@ -51,15 +62,15 @@ export function useRelayWrite() {
       toast.add({
         title:
           command.kind === "create_project"
-          ? "Project created"
-          : command.kind === "create_topic"
-            ? "Topic created"
-            : command.kind === "review_research" ||
-                command.kind === "review_script"
-              ? command.decision === "approved"
-                ? "Approved. Your decision is saved."
-                : "Feedback sent. Your agent can read it in Relay."
-              : "Changes saved. Ready for review.",
+            ? "Project created"
+            : command.kind === "create_topic"
+              ? "Topic created"
+              : command.kind === "review_research" ||
+                  command.kind === "review_script"
+                ? command.decision === "approved"
+                  ? "Approved. Your decision is saved."
+                  : "Feedback sent. Your agent can read it in Relay."
+                : "Changes saved. Ready for review.",
         type: "success",
       });
       return result;
@@ -76,123 +87,27 @@ export function useRelayWrite() {
   }
   return { write, pending, error };
 }
-export function ProjectFrame({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  const pathname = usePathname();
-  const { isAuthenticated } = useConvexAuth();
-  const projects = useQuery(
-    api.relay.read,
-    isAuthenticated ? { command: { kind: "projects" } } : "skip",
-  );
-  return (
-    <div className="research-workspace workspace-shell min-h-svh bg-background text-foreground">
-      <a
-        href="#project-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-50 focus:bg-background"
-      >
-        Skip to content
-      </a>
-      <aside className="workspace-sidebar">
-        <Link href="/projects" className="workspace-brand">
-          <span className="workspace-mark">
-            <Layers2 size={17} aria-hidden />
-          </span>
-          Relay
-          <span className="ms-auto text-xs font-normal text-muted-foreground">
-            Workspace
-          </span>
-        </Link>
-        <nav aria-label="Workspace navigation">
-          <Link
-            className="workspace-nav-item"
-            href="/projects"
-            aria-current={pathname === "/projects" ? "page" : undefined}
-          >
-            <Folder size={16} aria-hidden />
-            All projects
-          </Link>
-          <p className="mb-2 mt-8 px-2 text-xs font-medium text-muted-foreground">
-            Projects
-          </p>
-          {projects?.kind === "projects"
-            ? projects.projects.map((project) => (
-                <Link
-                  key={project._id}
-                  href={`/projects/${project._id}`}
-                  aria-current={
-                    pathname === `/projects/${project._id}` ? "page" : undefined
-                  }
-                  className="workspace-nav-item"
-                >
-                  <span className="workspace-project-glyph">
-                    {project.name.slice(0, 1).toUpperCase()}
-                  </span>
-                  <span className="min-w-0 truncate" title={project.name}>
-                    {project.name}
-                  </span>
-                </Link>
-              ))
-            : null}
-        </nav>
-        <div className="mt-auto flex items-center gap-3 border-t border-border pt-4">
-          <UserButton />
-          <span className="text-xs text-muted-foreground">
-            Personal workspace
-          </span>
-        </div>
-      </aside>
-      <div className="min-w-0">
-        <header className="workspace-topbar">
-          <Link href="/projects" className="text-muted-foreground">
-            Projects
-          </Link>
-          {title !== "Projects" ? (
-            <>
-              <ChevronRight
-                size={13}
-                className="text-muted-foreground"
-                aria-hidden
-              />
-              <span className="truncate" title={title}>
-                {title}
-              </span>
-            </>
-          ) : null}
-        </header>
-        <main
-          id="project-content"
-          className={`${workspacePageClass} workspace-main`}
-        >
-          {children}
-        </main>
-      </div>
-    </div>
-  );
-}
 export function Field({
   label,
   children,
 }: {
   label: string;
-  children: ReactNode;
+  children: ReactElement<{ id?: string }>;
 }) {
+  const generatedId = useId();
+  const id = children.props.id ?? generatedId;
   return (
-    <label className="grid gap-2 text-sm">
-      {label}
-      {children}
-    </label>
+    <div className="grid gap-2 text-sm">
+      <label htmlFor={id}>{label}</label>
+      {cloneElement(children, { id })}
+    </div>
   );
 }
 export function ErrorMessage({ error }: { error: string }) {
   return error ? (
     <p
       role="alert"
-      className="my-4 rounded-lg border border-border-strong bg-surface-subtle p-3 text-sm"
+      className="my-4 rounded-lg border border-destructive/30 bg-destructive-subtle p-3 text-sm text-destructive"
     >
       {error}
     </p>
@@ -206,6 +121,7 @@ export function Projects() {
   );
   const { write, pending, error } = useRelayWrite();
   const [adding, setAdding] = useState(false);
+  const createTrigger = useRef<HTMLElement | null>(null);
   const [search, setSearch] = useState("");
   const projectRows =
     data?.kind === "projects"
@@ -249,7 +165,12 @@ export function Projects() {
         title="Projects"
         description="Research and scripts, saved in one place."
         action={
-          <Button onClick={() => setAdding(true)}>
+          <Button
+            onClick={(event) => {
+              createTrigger.current = event.currentTarget;
+              setAdding(true);
+            }}
+          >
             <Plus aria-hidden />
             New project
           </Button>
@@ -257,6 +178,7 @@ export function Projects() {
       />
       <WorkspaceDialog
         open={adding}
+        returnFocusRef={createTrigger}
         onOpenChange={setAdding}
         title="Create a project"
         description="A space for related research and scripts."
@@ -276,6 +198,7 @@ export function Projects() {
         >
           <Field label="Name">
             <Input
+              disabled={pending}
               name="name"
               placeholder="e.g. The weekly explainer"
               autoComplete="off"
@@ -293,6 +216,23 @@ export function Projects() {
         </form>
         <ErrorMessage error={error} />
       </WorkspaceDialog>
+      <div className="connection-notice">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">
+            Bring your agent into the workspace
+          </p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Connect Relay to share research, sources, and drafts.
+          </p>
+        </div>
+        <Link
+          href="/onboarding"
+          className={buttonVariants({ variant: "outline", size: "sm" })}
+        >
+          Connect your agent
+          <ArrowUpRight aria-hidden />
+        </Link>
+      </div>
       <SearchInput
         className="workspace-search"
         label="Find a project"
@@ -309,7 +249,12 @@ export function Projects() {
               title="A home for your next idea"
               description="Create a project, add a topic, and turn research into a script."
             >
-              <Button onClick={() => setAdding(true)}>
+              <Button
+                onClick={(event) => {
+                  createTrigger.current = event.currentTarget;
+                  setAdding(true);
+                }}
+              >
                 <Plus aria-hidden />
                 Create a project
               </Button>
@@ -332,11 +277,7 @@ export function Projects() {
     </ProjectFrame>
   );
 }
-export function Project({
-  projectId,
-}: {
-  projectId: string;
-}) {
+export function Project({ projectId }: { projectId: string }) {
   const { isAuthenticated } = useConvexAuth();
   const data = useQuery(
     api.relay.read,
@@ -350,9 +291,14 @@ export function Project({
     if (topicId) params.set("topic", topicId);
     else params.delete("topic");
     const query = params.toString();
-    window.history.pushState(null, "", `/projects/${projectId}${query ? `?${query}` : ""}`);
+    window.history.pushState(
+      null,
+      "",
+      `/projects/${projectId}${query ? `?${query}` : ""}`,
+    );
   }
   const [adding, setAdding] = useState(false);
+  const createTrigger = useRef<HTMLElement | null>(null);
   const [search, setSearch] = useState("");
   if (!data || data.kind !== "project")
     return (
@@ -361,39 +307,45 @@ export function Project({
       </ProjectFrame>
     );
   const normalizedSearch = search.toLowerCase();
-  const topicRows = selected ? [] : data.topics.reduce<ReactNode[]>((rows, topic) => {
-    if (
-      !`${topic.title} ${topic.question}`
-        .toLowerCase()
-        .includes(normalizedSearch)
-    ) {
-      return rows;
-    }
-    rows.push(
-      <Link
-        key={topic._id}
-        href={`/projects/${projectId}?topic=${topic._id}`}
-        prefetch={false}
-        onNavigate={(event) => {
-          event.preventDefault();
-          setSelected(topic._id);
-        }}
-        className="workspace-list-row"
-      >
-        <span className="workspace-list-icon">
-          <FileText size={18} strokeWidth={1.5} aria-hidden />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h3 className="font-medium break-words">{topic.title}</h3>
-          <p className="mt-1 line-clamp-1 text-[13px] text-muted-foreground">
-            {topic.question}
-          </p>
-        </div>
-        <ChevronRight size={16} className="text-muted-foreground" aria-hidden />
-      </Link>,
-    );
-    return rows;
-  }, []);
+  const topicRows = selected
+    ? []
+    : data.topics.reduce<ReactNode[]>((rows, topic) => {
+        if (
+          !`${topic.title} ${topic.question}`
+            .toLowerCase()
+            .includes(normalizedSearch)
+        ) {
+          return rows;
+        }
+        rows.push(
+          <Link
+            key={topic._id}
+            href={`/projects/${projectId}?topic=${topic._id}`}
+            prefetch={false}
+            onNavigate={(event) => {
+              event.preventDefault();
+              setSelected(topic._id);
+            }}
+            className="workspace-list-row"
+          >
+            <span className="workspace-list-icon">
+              <FileText size={18} strokeWidth={1.5} aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-medium break-words">{topic.title}</h3>
+              <p className="mt-1 line-clamp-1 text-[13px] text-muted-foreground">
+                {topic.question}
+              </p>
+            </div>
+            <ChevronRight
+              size={16}
+              className="text-muted-foreground"
+              aria-hidden
+            />
+          </Link>,
+        );
+        return rows;
+      }, []);
   return (
     <ProjectFrame title={data.project.name}>
       {selected ? (
@@ -409,7 +361,12 @@ export function Project({
             title={data.project.name}
             description="Every good script starts with a question."
             action={
-              <Button onClick={() => setAdding(true)}>
+              <Button
+                onClick={(event) => {
+                  createTrigger.current = event.currentTarget;
+                  setAdding(true);
+                }}
+              >
                 <Plus aria-hidden />
                 New topic
               </Button>
@@ -417,6 +374,7 @@ export function Project({
           />
           <WorkspaceDialog
             open={adding}
+            returnFocusRef={createTrigger}
             onOpenChange={setAdding}
             title="Create a topic"
             description="Give your agent a clear question to investigate."
@@ -439,6 +397,7 @@ export function Project({
             >
               <Field label="Title">
                 <Input
+                  disabled={pending}
                   name="title"
                   placeholder="e.g. How browser caching works"
                   required
@@ -447,6 +406,7 @@ export function Project({
               </Field>
               <Field label="Research question">
                 <Textarea
+                  disabled={pending}
                   name="question"
                   placeholder="What should the research help us understand?"
                   required
@@ -486,7 +446,13 @@ export function Project({
                 title="What will you explore?"
                 description="Add your first topic to give your research a direction."
               >
-                <Button variant="outline" onClick={() => setAdding(true)}>
+                <Button
+                  variant="outline"
+                  onClick={(event) => {
+                    createTrigger.current = event.currentTarget;
+                    setAdding(true);
+                  }}
+                >
                   <Plus aria-hidden />
                   Create a topic
                 </Button>
@@ -570,6 +536,9 @@ function Topic({
           scripts={data.scripts}
         />
       </div>
+      {tab === "research" ? (
+        <ResearchExecution key={topicId} topicId={topicId} />
+      ) : null}
       <TopicDocument
         tab={tab}
         latest={latest}
@@ -705,9 +674,6 @@ function TopicDocument({
 function sceneKey(scene: { narration: string; visual: string }) {
   return `${scene.narration}\u0000${scene.visual}`;
 }
-function claimKey(claim: unknown) {
-  return JSON.stringify(claim);
-}
 function sourceKey(source: unknown) {
   return JSON.stringify(source);
 }
@@ -795,6 +761,7 @@ function Review({
             >
               <Field label="What needs to change?">
                 <Textarea
+                  disabled={pending}
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   required
@@ -840,7 +807,15 @@ function Research({
   useDraftProtection(
     editing &&
       (summary !== row.summary ||
-        JSON.stringify(claims) !== JSON.stringify(row.claims)),
+        claims.some((claim, index) => {
+          const original = row.claims[index];
+          return (
+            !original ||
+            claim.text !== original.text ||
+            claim.assessment !== original.assessment ||
+            claim.note !== original.note
+          );
+        })),
   );
   return (
     <section className="max-w-[720px]">
@@ -888,6 +863,7 @@ function Research({
           </div>
           <Field label="Summary">
             <Textarea
+              disabled={pending}
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               required
@@ -895,12 +871,10 @@ function Research({
             />
           </Field>
           {claims.map((claim, index) => (
-            <div
-              key={claimKey(claim)}
-              className="grid gap-4 border-t border-border pt-5"
-            >
+            <div key={index} className="grid gap-4 border-t border-border pt-5">
               <Field label={`Finding ${index + 1}`}>
                 <Textarea
+                  disabled={pending}
                   value={claim.text}
                   required
                   maxLength={4000}
@@ -915,7 +889,8 @@ function Research({
               </Field>
               <Field label="Assessment">
                 <select
-                  className="min-h-9 rounded-md border border-border-strong bg-background px-3"
+                  disabled={pending}
+                  className={workspaceSelectClass}
                   value={claim.assessment}
                   onChange={(e) => {
                     const value = e.target.value;
@@ -938,6 +913,7 @@ function Research({
               </Field>
               <Field label="Assessment note">
                 <Textarea
+                  disabled={pending}
                   value={claim.note}
                   maxLength={4000}
                   onChange={(e) =>
@@ -961,7 +937,15 @@ function Research({
               onClick={() => {
                 if (
                   (summary === row.summary &&
-                    JSON.stringify(claims) === JSON.stringify(row.claims)) ||
+                    claims.every((claim, index) => {
+                      const original = row.claims[index];
+                      return (
+                        original &&
+                        claim.text === original.text &&
+                        claim.assessment === original.assessment &&
+                        claim.note === original.note
+                      );
+                    })) ||
                   window.confirm("Discard your unsaved changes?")
                 )
                   setEditing(false);
@@ -982,16 +966,20 @@ function Research({
           </h2>
           <div className="space-y-2">
             {row.claims.map((claim, index) => (
-              <article key={claimKey(claim)} className="relative py-5 ps-9">
+              <article
+                key={index}
+                className="relative border-b border-border py-6 ps-9 last:border-0"
+              >
                 <span className="absolute start-0 top-6 text-xs tabular-nums text-muted-foreground">
                   {String(index + 1).padStart(2, "0")}
                 </span>
                 <p className="text-[15px] leading-7">{claim.text}</p>
-                {claim.assessment !== "supported" ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {claim.assessment} · {claim.note}
-                  </p>
-                ) : null}
+                <p className="mt-3 text-xs font-medium text-muted-foreground">
+                  <span className="capitalize">{claim.assessment}</span>
+                  {claim.assessment !== "supported" && claim.note
+                    ? ` · ${claim.note}`
+                    : " · Agent assessment"}
+                </p>
                 <div className="mt-2">
                   <WorkspaceDialog
                     title="Supporting sources"
@@ -1166,6 +1154,7 @@ function ScriptDocument({
         >
           <Field label="Title">
             <Input
+              disabled={pending}
               value={title}
               required
               maxLength={160}
@@ -1173,12 +1162,10 @@ function ScriptDocument({
             />
           </Field>
           {scenes.map((scene, index) => (
-            <div
-              key={sceneKey(scene)}
-              className="grid gap-4 border-t border-border pt-5"
-            >
+            <div key={index} className="grid gap-4 border-t border-border pt-5">
               <Field label={`Scene ${index + 1} narration`}>
                 <Textarea
+                  disabled={pending}
                   required
                   value={scene.narration}
                   maxLength={10000}
@@ -1195,6 +1182,7 @@ function ScriptDocument({
               </Field>
               <Field label="Visual plan">
                 <Textarea
+                  disabled={pending}
                   required
                   value={scene.visual}
                   maxLength={10000}
