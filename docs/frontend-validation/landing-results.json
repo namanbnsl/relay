@@ -1,0 +1,165 @@
+[
+  {
+    "label": "before",
+    "firstPartyScriptCount": 13,
+    "firstPartyScriptBytes": 802049,
+    "firstPartyScriptGzipBytes": 242079,
+    "files": [
+      {
+        "file": "/_next/static/chunks/a0c7a76e-992b35e99051f6ef.js",
+        "bytes": 201053,
+        "gzipBytes": 63298
+      },
+      {
+        "file": "/_next/static/chunks/530-cf0bfe9abd683f16.js",
+        "bytes": 240762,
+        "gzipBytes": 66116
+      },
+      {
+        "file": "/_next/static/chunks/main-app-21a11f44e8a1c20d.js",
+        "bytes": 513,
+        "gzipBytes": 222
+      },
+      {
+        "file": "/_next/static/chunks/983-1c62a3f8645f1d7f.js",
+        "bytes": 8993,
+        "gzipBytes": 3684
+      },
+      {
+        "file": "/_next/static/chunks/347-82eaa7619d4426eb.js",
+        "bytes": 144315,
+        "gzipBytes": 38991
+      },
+      {
+        "file": "/_next/static/chunks/888-56d13271eff758fe.js",
+        "bytes": 27753,
+        "gzipBytes": 11101
+      },
+      {
+        "file": "/_next/static/chunks/962-1e3e58c15d23f311.js",
+        "bytes": 98489,
+        "gzipBytes": 29232
+      },
+      {
+        "file": "/_next/static/chunks/950-b126d76ffe12dd2d.js",
+        "bytes": 33715,
+        "gzipBytes": 11857
+      },
+      {
+        "file": "/_next/static/chunks/422-fe847ee97c784b48.js",
+        "bytes": 25394,
+        "gzipBytes": 9231
+      },
+      {
+        "file": "/_next/static/chunks/app/layout-9394fcd9517f0622.js",
+        "bytes": 8472,
+        "gzipBytes": 2758
+      },
+      {
+        "file": "/_next/static/chunks/163-eb084780680125a9.js",
+        "bytes": 8633,
+        "gzipBytes": 3569
+      },
+      {
+        "file": "/_next/static/chunks/app/page-af02094c0678767b.js",
+        "bytes": 631,
+        "gzipBytes": 348
+      },
+      {
+        "file": "/_next/static/chunks/webpack-778cbaf5f223ea44.js",
+        "bytes": 3326,
+        "gzipBytes": 1672
+      }
+    ],
+    "violations": [],
+    "widths": [
+      {
+        "width": 1440,
+        "scrollWidth": 1440
+      },
+      {
+        "width": 390,
+        "scrollWidth": 390
+      },
+      {
+        "width": 320,
+        "scrollWidth": 320
+      }
+    ],
+    "firstFocus": "Skip to content"
+  },
+  {
+    "label": "after",
+    "firstPartyScriptCount": 10,
+    "firstPartyScriptBytes": 646534,
+    "firstPartyScriptGzipBytes": 191733,
+    "files": [
+      {
+        "file": "/_next/static/chunks/a0c7a76e-992b35e99051f6ef.js",
+        "bytes": 201053,
+        "gzipBytes": 63298
+      },
+      {
+        "file": "/_next/static/chunks/530-cf0bfe9abd683f16.js",
+        "bytes": 240762,
+        "gzipBytes": 66116
+      },
+      {
+        "file": "/_next/static/chunks/main-app-21a11f44e8a1c20d.js",
+        "bytes": 513,
+        "gzipBytes": 222
+      },
+      {
+        "file": "/_next/static/chunks/825-51a4e31cad8b2fb1.js",
+        "bytes": 142968,
+        "gzipBytes": 38392
+      },
+      {
+        "file": "/_next/static/chunks/950-c246efce2833f698.js",
+        "bytes": 34062,
+        "gzipBytes": 11937
+      },
+      {
+        "file": "/_next/static/chunks/app/layout-c4a36639f6c2488a.js",
+        "bytes": 4554,
+        "gzipBytes": 1962
+      },
+      {
+        "file": "/_next/static/chunks/983-1c62a3f8645f1d7f.js",
+        "bytes": 8993,
+        "gzipBytes": 3684
+      },
+      {
+        "file": "/_next/static/chunks/163-eb084780680125a9.js",
+        "bytes": 8633,
+        "gzipBytes": 3569
+      },
+      {
+        "file": "/_next/static/chunks/app/page-d2bde6c1f252af97.js",
+        "bytes": 1670,
+        "gzipBytes": 880
+      },
+      {
+        "file": "/_next/static/chunks/webpack-6d92e3bcd6eb7c85.js",
+        "bytes": 3326,
+        "gzipBytes": 1673
+      }
+    ],
+    "violations": [],
+    "widths": [
+      {
+        "width": 1440,
+        "scrollWidth": 1440
+      },
+      {
+        "width": 390,
+        "scrollWidth": 390
+      },
+      {
+        "width": 320,
+        "scrollWidth": 320
+      }
+    ],
+    "firstFocus": "Skip to content"
+  }
+]

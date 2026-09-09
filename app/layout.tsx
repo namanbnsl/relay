@@ -3,9 +3,6 @@ import type { Metadata } from "next";
 import { IBM_Plex_Mono, Instrument_Sans } from "next/font/google";
 
 import { ClerkProvider } from "@clerk/nextjs";
-import { ConvexClientProvider } from "@/components/convex-client-provider";
-import { Toaster } from "@/components/ui/toast";
-import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { Analytics } from "@vercel/analytics/next";
 
@@ -18,14 +15,18 @@ const instrumentSans = Instrument_Sans({
 
 const ibmPlexMono = IBM_Plex_Mono({
   subsets: ["latin"],
-  weight: ["400", "500"],
+  weight: ["400"],
+  preload: false,
   variable: "--font-ibm-plex-mono",
 });
 
 export const metadata: Metadata = {
-  title: "Relay — Evidence-backed video, end to end",
+  title: {
+    default: "Relay — From research to a script you can stand behind",
+    template: "%s · Relay",
+  },
   description:
-    "Relay connects research, exact-version approvals, deterministic video production, review, and publishing in one durable workflow.",
+    "A shared workspace for your research and your agent. Keep findings, sources, scripts, and version-specific reviews together.",
 };
 
 export default function RootLayout({
@@ -38,12 +39,7 @@ export default function RootLayout({
       className={`${instrumentSans.variable} ${ibmPlexMono.variable}`}
     >
       <body>
-        <ClerkProvider>
-          <ConvexClientProvider>
-            <TooltipProvider>{children}</TooltipProvider>
-          </ConvexClientProvider>
-        </ClerkProvider>
-        <Toaster />
+        <ClerkProvider>{children}</ClerkProvider>
         <Analytics />
       </body>
     </html>

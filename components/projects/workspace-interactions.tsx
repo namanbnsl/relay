@@ -6,6 +6,7 @@ import {
   useState,
   type ReactElement,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { Check, Copy, X, ArrowUpRight, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,7 @@ export function WorkspaceDialog({
   children,
   open,
   onOpenChange,
+  returnFocusRef,
 }: {
   title: string;
   description: string;
@@ -61,6 +63,7 @@ export function WorkspaceDialog({
   children: ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const returnFocus = useRef<HTMLElement | null>(null);
   return (
@@ -77,38 +80,44 @@ export function WorkspaceDialog({
       }}
     >
       <DialogTrigger render={trigger} />
-        <DialogContent
-          showCloseButton={false}
-          className="workspace-dialog research-workspace"
-          initialFocus={() =>
-            document.querySelector<HTMLElement>(
-              ".workspace-dialog input, .workspace-dialog textarea",
-            )
-          }
-          finalFocus={() =>
-            returnFocus.current?.isConnected ? returnFocus.current : null
-          }
-        >
-          <div className="pe-8">
-            <DialogTitle className="text-lg font-semibold tracking-tight">
-              {title}
-            </DialogTitle>
-            <DialogDescription className="mt-2 text-sm leading-6 text-muted-foreground">
-              {description}
-            </DialogDescription>
-          </div>
-          <DialogClose
-            render={<Button
+      <DialogContent
+        showCloseButton={false}
+        className="workspace-dialog research-workspace"
+        initialFocus={() =>
+          document.querySelector<HTMLElement>(
+            ".workspace-dialog input, .workspace-dialog textarea",
+          )
+        }
+        finalFocus={() =>
+          returnFocusRef?.current?.isConnected
+            ? returnFocusRef.current
+            : returnFocus.current?.isConnected
+              ? returnFocus.current
+              : null
+        }
+      >
+        <div className="pe-8">
+          <DialogTitle className="text-lg font-semibold tracking-tight">
+            {title}
+          </DialogTitle>
+          <DialogDescription className="mt-2 text-sm leading-6 text-muted-foreground">
+            {description}
+          </DialogDescription>
+        </div>
+        <DialogClose
+          render={
+            <Button
               variant="ghost"
               size="icon"
               className="absolute end-4 top-4"
               aria-label="Close dialog"
-            />}
-          >
-              <X aria-hidden />
-          </DialogClose>
-          <div className="mt-6">{children}</div>
-        </DialogContent>
+            />
+          }
+        >
+          <X aria-hidden />
+        </DialogClose>
+        <div className="mt-6">{children}</div>
+      </DialogContent>
     </Dialog>
   );
 }
