@@ -34,10 +34,6 @@ export default defineSchema({
     .index("by_topic_occupied", ["topicId", "occupied"]),
   researchPackets: defineTable(packetFields).index("by_run", ["runId"]),
   researchEvidence: defineTable(evidenceFields).index("by_run", ["runId"]),
-  users: defineTable({
-    subject: v.string(),
-    name: v.union(v.string(), v.null()),
-  }).index("by_subject", ["subject"]),
   projects: defineTable(projectFields)
     .index("by_owner", ["owner"])
     .index("by_owner_name", ["owner", "name"]),

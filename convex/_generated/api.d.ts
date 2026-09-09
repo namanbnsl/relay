@@ -20,7 +20,6 @@ import type * as research from "../research.js";
 import type * as researchActions from "../researchActions.js";
 import type * as researchSteps from "../researchSteps.js";
 import type * as researchWorkflow from "../researchWorkflow.js";
-import type * as users from "../users.js";
 
 import type {
   ApiFromModules,
@@ -41,7 +40,6 @@ declare const fullApi: ApiFromModules<{
   researchActions: typeof researchActions;
   researchSteps: typeof researchSteps;
   researchWorkflow: typeof researchWorkflow;
-  users: typeof users;
 }>;
 
 /**
