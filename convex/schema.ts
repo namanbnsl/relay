@@ -22,12 +22,6 @@ export default defineSchema({
     plan: v.optional(plan),
     runId: v.id("researchRuns"),
   }).index("by_request", ["owner", "requestKey"]),
-  mcpConnections: defineTable({
-    subject: v.string(),
-    lastSuccessfulReadAt: v.optional(v.number()),
-    lastSuccessfulWriteAt: v.optional(v.number()),
-    testCreatedAt: v.optional(v.number()),
-  }).index("by_subject", ["subject"]),
   researchRuns: defineTable(runFields)
     .index("by_topic", ["topicId"])
     .index("by_request", ["owner", "requestKey"])

@@ -34,7 +34,6 @@ it("runs the authenticated MCP research path through a persisted packet and user
   const t = convexTest(schema, modules);
   workflowTest.register(t);
   const owner = t.withIdentity({ subject: "user_owner" });
-  const other = t.withIdentity({ subject: "user_other" });
   const token = "owner-fixture";
   const project = await t.action(api.mcp.write, {
     token,
@@ -100,9 +99,6 @@ it("runs the authenticated MCP research path through a persisted packet and user
       command: { kind: "get_run", runId: run._id },
     }),
   ).rejects.toThrow("not found");
-  expect(
-    (await other.query(api.mcpActivity.get, {})).lastSuccessfulReadAt,
-  ).toBeNull();
   for (let i = 0; i < 40; i++) {
     await vi.advanceTimersByTimeAsync(15000);
     await t.finishInProgressScheduledFunctions();
@@ -125,9 +121,6 @@ it("runs the authenticated MCP research path through a persisted packet and user
   });
   if (evidence.kind !== "evidence") throw new Error("Wrong evidence result");
   expect(evidence.contentUrl).toBeTruthy();
-  expect(
-    (await owner.query(api.mcpActivity.get, {})).lastSuccessfulReadAt,
-  ).toBe(Date.now());
   await t.action(api.mcp.write, {
     token,
     command: {
@@ -162,90 +155,12 @@ it("runs the authenticated MCP research path through a persisted packet and user
     ),
   ).toHaveLength(1);
 });
-it("records only successful authenticated MCP operations and keeps the removable marker user-scoped", async () => {
+it("rejects revoked MCP credentials", async () => {
   const t = convexTest(schema, modules);
-  const owner = t.withIdentity({ subject: "user_owner" });
-  const other = t.withIdentity({ subject: "user_other" });
-  expect(await owner.query(api.mcpActivity.get, {})).toEqual({
-    lastSuccessfulReadAt: null,
-    lastSuccessfulWriteAt: null,
-    testMarker: null,
-  });
-  await expect(t.query(api.mcpActivity.get, {})).rejects.toThrow(
-    "Unauthenticated",
-  );
   await expect(
     t.action(api.mcp.read, {
       token: "revoked-fixture",
       command: { kind: "projects" },
     }),
   ).rejects.toThrow("Unauthenticated");
-  await expect(
-    t.action(api.mcp.read, {
-      token: "owner-fixture",
-      command: { kind: "topic", topicId: "invalid-id" },
-    }),
-  ).rejects.toThrow();
-  expect(
-    (await owner.query(api.mcpActivity.get, {})).lastSuccessfulReadAt,
-  ).toBeNull();
-  await t.action(api.mcp.read, {
-    token: "owner-fixture",
-    command: { kind: "projects" },
-  });
-  expect(
-    (await owner.query(api.mcpActivity.get, {})).lastSuccessfulReadAt,
-  ).toBe(Date.now());
-  await expect(
-    t.action(api.mcp.write, {
-      token: "owner-fixture",
-      command: {
-        kind: "create_topic",
-        projectId: "invalid-id",
-        title: "Test",
-        question: "Test?",
-      },
-    }),
-  ).rejects.toThrow();
-  expect(
-    (await owner.query(api.mcpActivity.get, {})).lastSuccessfulWriteAt,
-  ).toBeNull();
-  await t.action(api.mcp.write, {
-    token: "owner-fixture",
-    command: { kind: "create_project", name: "MCP fixture" },
-  });
-  expect(
-    (await owner.query(api.mcpActivity.get, {})).lastSuccessfulWriteAt,
-  ).toBe(Date.now());
-  const marker = await t.action(api.mcp.testConnection, {
-    token: "owner-fixture",
-    operation: "create",
-  });
-  vi.setSystemTime(Date.now() + 1000);
-  expect(
-    (
-      await t.action(api.mcp.testConnection, {
-        token: "owner-fixture",
-        operation: "create",
-      })
-    ).testMarker,
-  ).toEqual(marker.testMarker);
-  await other.mutation(api.mcpActivity.clearConnectionTest, {});
-  expect((await owner.query(api.mcpActivity.get, {})).testMarker).toEqual(
-    marker.testMarker,
-  );
-  expect((await other.query(api.mcpActivity.get, {})).testMarker).toBeNull();
-  await owner.mutation(api.mcpActivity.clearConnectionTest, {});
-  const cleared = await owner.query(api.mcpActivity.get, {});
-  expect(cleared.testMarker).toBeNull();
-  expect(cleared.lastSuccessfulReadAt).not.toBeNull();
-  expect(cleared.lastSuccessfulWriteAt).not.toBeNull();
-  expect(
-    (
-      await t.action(api.mcp.testConnection, {
-        token: "owner-fixture",
-        operation: "remove",
-      })
-    ).testMarker,
-  ).toBeNull();
 });

@@ -197,58 +197,6 @@ const handler = createMcpHandler(
           extra.http?.authInfo?.token,
         ),
     );
-    for (const operation of ["create", "remove"] as const) {
-      server.registerTool(
-        operation === "create" ? "test_connection" : "remove_connection_test",
-        {
-          description:
-            operation === "create"
-              ? "Verify authenticated MCP write access by creating one idempotent, user-owned connection-test marker. Does not create research or spend provider credits. Remove with remove_connection_test or in Relay."
-              : "Remove your connection-test marker idempotently. Successful MCP activity timestamps remain as history.",
-          inputSchema: z.object({}),
-          annotations: {
-            readOnlyHint: false,
-            destructiveHint: operation === "remove",
-            idempotentHint: true,
-            openWorldHint: false,
-          },
-        },
-        async (_, extra) => {
-          const token = extra.http?.authInfo?.token;
-          const url = process.env.NEXT_PUBLIC_CONVEX_URL;
-          if (!token || !url)
-            return {
-              isError: true,
-              content: [
-                {
-                  type: "text" as const,
-                  text: "Authenticated Relay connection required.",
-                },
-              ],
-            };
-          try {
-            const data = await new ConvexHttpClient(url).action(
-              api.mcp.testConnection,
-              { token, operation },
-            );
-            return {
-              structuredContent: data,
-              content: [{ type: "text" as const, text: JSON.stringify(data) }],
-            };
-          } catch {
-            return {
-              isError: true,
-              content: [
-                {
-                  type: "text" as const,
-                  text: "Connection test failed. Check authentication and retry.",
-                },
-              ],
-            };
-          }
-        },
-      );
-    }
     const readAnnotations = {
       readOnlyHint: true,
       destructiveHint: false,

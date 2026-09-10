@@ -168,16 +168,6 @@ export const researchReadResult = v.union(
   }),
 );
 
-export const connectionMarker = v.union(
-  v.object({ id: v.string(), createdAt: v.number() }),
-  v.null(),
-);
-export const connectionTestResult = v.object({
-  testMarker: connectionMarker,
-  removed: v.boolean(),
-  path: v.string(),
-});
-
 export function settings() {
   const parsed = z
     .object({

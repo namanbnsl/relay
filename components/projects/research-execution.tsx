@@ -29,7 +29,7 @@ export function ResearchExecution({ topicId }: { topicId: string }) {
     return (
       <p
         role="status"
-        className="my-6 min-h-24 border-y border-border py-6 text-sm text-muted-foreground"
+        className="my-6 min-h-24 py-6 text-sm text-muted-foreground"
       >
         Loading research status…
       </p>
@@ -64,16 +64,14 @@ export function ResearchExecution({ topicId }: { topicId: string }) {
   }
   return (
     <section
-      className="my-6 rounded-lg border border-border bg-card p-5"
+      className="my-8 py-2"
       aria-label="Research progress"
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-sm font-medium">Research this question</h2>
           <p className="mt-1 max-w-lg text-xs leading-5 text-muted-foreground">
-            Relay runs provider research in the background and keeps the
-            retrieved sources here. Your agent uses the results to prepare
-            findings for your review.
+            Gather sources for your agent to turn into findings.
           </p>
         </div>
         <Button

@@ -33,7 +33,6 @@ export function useQuery(api,args){
  useSyncExternalStore(subscribe,version,version);
  if(args==='skip')return;
  const state=new URLSearchParams(location.search).get('state');
- if(!args.command){window.activity??=state==='verified'?{lastSuccessfulReadAt:1788912000000,lastSuccessfulWriteAt:1788912001000,testMarker:{id:'marker',createdAt:1788912001000}}:{lastSuccessfulReadAt:null,lastSuccessfulWriteAt:null,testMarker:null};return window.activity;}
  const f=window.fixture;
  switch(args.command.kind){
  case 'projects':return {kind:'projects',projects:state==='empty'?[]:[f.project]};
@@ -45,7 +44,6 @@ export function useQuery(api,args){
 export const useMutation=()=>async args=>{
  window.commands.push(args.command);
  if(window.failWrite)throw new Error('Test failure');
- if(!args.command){window.activity={...window.activity,testMarker:null};window.fixtureVersion=(window.fixtureVersion??0)+1;window.dispatchEvent(new Event('fixture'));}
  return {id:'topic-test'};
 };`;
 await writeFile(
@@ -53,11 +51,10 @@ await writeFile(
   `
 import React from 'react';import {createRoot} from 'react-dom/client';
 import {Projects,Project,Research,ScriptDocument,TopicHistory} from '${root}/components/projects/live-projects.tsx';
-import {AgentOnboarding} from '${root}/components/projects/agent-onboarding.tsx';
 import {ProjectFrame} from '${root}/components/projects/project-frame.tsx';
 ${fixtures}
 const mode=new URLSearchParams(location.search).get('view');
-createRoot(document.getElementById('root')).render(mode==='onboarding'?<AgentOnboarding/>:mode==='research'?<ProjectFrame title={topic.title}><h1>Research review</h1><TopicHistory tab="research" research={[research]} scripts={[]}/><div className="workspace-document"><Research row={research}/></div></ProjectFrame>:mode==='script'?<ProjectFrame title={topic.title}><h1>Script review</h1><div className="workspace-document"><ScriptDocument row={script} research={[{...research,review:{kind:'approved'}}]}/></div></ProjectFrame>:mode==='project'?<Project projectId={project._id}/>:<Projects/>);
+createRoot(document.getElementById('root')).render(mode==='research'?<ProjectFrame title={topic.title}><h1>Research review</h1><TopicHistory tab="research" research={[research]} scripts={[]}/><div className="workspace-document"><Research row={research}/></div></ProjectFrame>:mode==='script'?<ProjectFrame title={topic.title}><h1>Script review</h1><div className="workspace-document"><ScriptDocument row={script} research={[{...research,review:{kind:'approved'}}]}/></div></ProjectFrame>:mode==='project'?<Project projectId={project._id}/>:<Projects/>);
 `,
 );
 await build({
@@ -147,6 +144,7 @@ await page.route("http://relay-ui.test/**", async (route) => {
 const results = [];
 const checkAxe = async (label) => {
   if (!process.env.RELAY_AXE_SCRIPT) return;
+  await page.evaluate(() => Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => {}))));
   await page.addScriptTag({ path: process.env.RELAY_AXE_SCRIPT });
   const violations = await page.evaluate(async () =>
     (
@@ -158,7 +156,7 @@ const checkAxe = async (label) => {
       })
     ).violations.map((v) => ({
       id: v.id,
-      targets: v.nodes.map((n) => n.target),
+      targets: v.nodes.map((n) => ({ target: n.target, reason: n.failureSummary })),
     })),
   );
   results.push({ label, violations });
@@ -169,7 +167,6 @@ for (const view of [
   "project",
   "research",
   "script",
-  "onboarding",
 ]) {
   await page.goto("http://relay-ui.test/?view=" + view);
   await page.waitForSelector("h1");
@@ -278,17 +275,6 @@ for (const view of [
       "desktop and 390/320px layouts; applicable editing, search, dialogs, history and error checks passed",
   });
 }
-await page.goto("http://relay-ui.test/?view=onboarding&state=verified");
-await page
-  .getByText("Read and write access observed", { exact: true })
-  .waitFor();
-await page
-  .getByRole("button", { name: "Remove test marker", exact: true })
-  .click();
-await page
-  .getByText("No test marker remains in your workspace.", { exact: true })
-  .waitFor();
-await checkAxe("observed activity and removed marker");
 await page.goto("http://relay-ui.test/?view=projects&state=empty");
 await page
   .getByRole("heading", { name: "A home for your next idea" })
@@ -301,7 +287,7 @@ await page.goto("http://relay-ui.test/?view=projects&state=offline");
 await page.getByRole("status").filter({ hasText: "Reconnecting" }).waitFor();
 results.push({
   states:
-    "verified activity, reversible marker removal, empty projects and disconnected workspace passed",
+    "empty projects and disconnected workspace passed",
 });
 assert.deepEqual(errors, []);
 await writeFile(

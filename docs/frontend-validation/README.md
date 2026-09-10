@@ -1,10 +1,20 @@
 # Frontend validation
 
+## Workspace cleanup — September 10
+
+Removed the agent setup page, navigation links, activity tracking, and connection-test tools. Regenerated the remaining workspace previews and results with the local fixture harness at 1440, 390, and 320px; accessibility, editing, dialogs, search, mobile navigation, and disconnected-state checks passed. All 21 backend tests, lint, typecheck, and the production build passed. Convex development synced successfully. These checks do not verify a live external-agent OAuth session.
+
+## Neutral UI restoration — September 9
+
+Restored the pre-redesign white/ink palette and compact landing page. Removed the recurring setup banner and decorative workspace borders. The workspace previews below were regenerated for this pass.
+
+Validation: production build, TypeScript, and lint passed. The local component browser harness passed at 1440, 390, and 320px, including accessibility checks, search, editing, dialogs. Fixtures do not verify live OAuth or backend writes. The in-app browser reported no available browsers during this run. Live landing-page verification was blocked by a Clerk session redirect loop on both localhost and 127.0.0.1. Older landing previews, performance, and color measurements below describe the previous redesign, not this restoration.
+
 ## Scope and limits
 
 The public landing page was inspected in a real running production Next.js build. Workspace screenshots use the actual React components in an isolated browser harness with explicitly fictional local fixtures. The harness replaces only Clerk, navigation, and Convex transport; it never contacts a backend or writes workspace data. These screenshots demonstrate presentation, not completed research or a real authenticated connection.
 
-No authenticated browser session or external-agent OAuth session was available. Live sign-in, actual MCP read/write/cleanup, paid provider execution, and ownership enforcement through the deployed service still need an end-to-end smoke test after the two branches are integrated. No WCAG certification or Lighthouse score is claimed.
+No authenticated browser session or external-agent OAuth session was available. Live sign-in, actual MCP read/write, paid provider execution, and ownership enforcement through the deployed service still need an end-to-end smoke test after the two branches are integrated. No WCAG certification or Lighthouse score is claimed.
 
 ## Checks
 
@@ -12,7 +22,7 @@ No authenticated browser session or external-agent OAuth session was available. 
 - `bun run typecheck` and `bun run build`: passed in the combined filesystem copy at `/tmp/relay-integration`. The frontend branch requires the other agent’s new backend API and schema; see the [integration instructions](../frontend-handoff.md).
 - Axe 4.10.2: zero A/AA violations in tested public/workspace screens and checked dialogs. Test tags: WCAG 2 A/AA, 2.1 AA, 2.2 AA. Automated checks do not cover all success criteria.
 - Playwright keyboard checks: skip link; initial project-name focus; Escape dismissal and return to the creating button; request-changes focus trapping; mobile-menu Escape behavior.
-- Component behavior: continuous research/script typing retains focus; failed saves retain the editor and draft; save requests retain the base-version ID; project search/empty results; history expansion; source dialog; observed-activity state; test-marker removal; disconnected transport state.
+- Component behavior: continuous research/script typing retains focus; failed saves retain the editor and draft; save requests retain the base-version ID; project search/empty results; history expansion; source dialog; disconnected transport state.
 - Reflow: landing and workspace checked at 1440px, 390px, and 320px without horizontal overflow. Reduced-motion suppression is retained in shared CSS. Real assistive-technology and browser-zoom testing remain release checks.
 - Manual contrast review: dark text and muted text on paper surfaces; primary green with white text; opaque `#858d7e` control borders against the background (3.34:1). Muted text measures 5.64:1; primary-button text 8.31:1. Status meaning is also expressed in words.
 
@@ -61,6 +71,5 @@ Both scripts write results and screenshots beside this document. The UI harness 
 - [Projects, desktop](previews/projects-desktop.png) · [mobile](previews/projects-mobile.png)
 - [Research, desktop](previews/research-desktop.png) · [mobile](previews/research-mobile.png)
 - [Script, desktop](previews/script-desktop.png) · [mobile](previews/script-mobile.png)
-- [Onboarding, desktop](previews/onboarding-desktop.png) · [mobile](previews/onboarding-mobile.png)
 
 Workspace previews are local presentation fixtures. The landing preview is a capture of the actual public route; its embedded example is explicitly labeled illustrative in the product.

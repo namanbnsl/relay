@@ -41,19 +41,7 @@
       "checks": "desktop and 390/320px layouts; applicable editing, search, dialogs, history and error checks passed"
     },
     {
-      "label": "onboarding",
-      "violations": []
-    },
-    {
-      "view": "onboarding",
-      "checks": "desktop and 390/320px layouts; applicable editing, search, dialogs, history and error checks passed"
-    },
-    {
-      "label": "observed activity and removed marker",
-      "violations": []
-    },
-    {
-      "states": "verified activity, reversible marker removal, empty projects and disconnected workspace passed"
+      "states": "empty projects and disconnected workspace passed"
     }
   ],
   "errors": []

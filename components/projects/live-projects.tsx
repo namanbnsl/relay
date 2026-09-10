@@ -31,7 +31,6 @@ import {
 } from "react";
 import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
-import { buttonVariants } from "@/components/ui/button-variants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchInput } from "@/components/ui/search-input";
@@ -216,23 +215,6 @@ export function Projects() {
         </form>
         <ErrorMessage error={error} />
       </WorkspaceDialog>
-      <div className="connection-notice">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">
-            Bring your agent into the workspace
-          </p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Connect Relay to share research, sources, and drafts.
-          </p>
-        </div>
-        <Link
-          href="/onboarding"
-          className={buttonVariants({ variant: "outline", size: "sm" })}
-        >
-          Connect your agent
-          <ArrowUpRight aria-hidden />
-        </Link>
-      </div>
       <SearchInput
         className="workspace-search"
         label="Find a project"

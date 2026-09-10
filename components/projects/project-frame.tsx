@@ -7,10 +7,14 @@ import {
 } from "convex/react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { ChevronRight, Folder, Layers2, Plug, Menu } from "lucide-react";
-import type { ReactNode } from "react";
+import { ChevronRight, Folder, Layers2, Menu } from "lucide-react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { api } from "@/convex/_generated/api";
 import { workspacePageClass } from "./workspace-ui";
+
+const subscribeToHydration = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
 
 export function ProjectFrame({
   title,
@@ -21,6 +25,12 @@ export function ProjectFrame({
 }) {
   const pathname = usePathname();
   const connection = useConvexConnectionState();
+  // Connection state is browser-specific; keep the initial hydration text stable.
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    getClientSnapshot,
+    getServerSnapshot,
+  );
   const { isAuthenticated } = useConvexAuth();
   const projects = useQuery(
     api.relay.read,
@@ -76,14 +86,6 @@ export function ProjectFrame({
               ))
             : null}
         </nav>
-        <Link
-          href="/onboarding"
-          className="workspace-nav-item max-[760px]:hidden"
-          aria-current={pathname === "/onboarding" ? "page" : undefined}
-        >
-          <Plug size={16} aria-hidden />
-          Connect your agent
-        </Link>
         <details
           className="relative hidden max-[760px]:block"
           onKeyDown={(event) => {
@@ -101,12 +103,9 @@ export function ProjectFrame({
             <Link href="/projects" className="workspace-nav-item">
               All projects
             </Link>
-            <Link href="/onboarding" className="workspace-nav-item">
-              Connect your agent
-            </Link>
           </div>
         </details>
-        <div className="mt-auto flex items-center gap-3 border-t border-border pt-4">
+        <div className="mt-auto flex items-center gap-3 pt-4">
           <UserButton />
           <span className="text-xs text-muted-foreground">
             Personal workspace
@@ -134,8 +133,12 @@ export function ProjectFrame({
             role="status"
             className="ms-auto shrink-0 text-xs text-muted-foreground"
           >
-            {connection.isWebSocketConnected ? "Live updates" : "Reconnecting…"}
-            {!connection.isWebSocketConnected ? (
+            {!hydrated
+              ? "Connecting…"
+              : connection.isWebSocketConnected
+                ? "Live updates"
+                : "Reconnecting…"}
+            {hydrated && !connection.isWebSocketConnected ? (
               <span className="sr-only">
                 {" "}
                 Check your connection and refresh if this continues. Saved work

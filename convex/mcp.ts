@@ -5,7 +5,6 @@ import {
   writeResearchCommand,
   researchReadResult,
   publicRunResult,
-  connectionTestResult,
 } from "./model/researchContracts";
 import { createClerkClient } from "@clerk/backend";
 import { ConvexError, v, type Infer } from "convex/values";
@@ -48,15 +47,10 @@ export const read = action({
     { token, command },
   ): Promise<Infer<typeof readResult>> => {
     const subject = await verify(token);
-    const result = await ctx.runQuery(internal.relay.readFromMcp, {
+    return ctx.runQuery(internal.relay.readFromMcp, {
       subject,
       command,
     });
-    await ctx.runMutation(internal.mcpActivity.recordSuccess, {
-      subject,
-      operation: "read",
-    });
-    return result;
   },
 });
 export const write = action({
@@ -67,15 +61,10 @@ export const write = action({
     { token, command },
   ): Promise<Infer<typeof writeResult>> => {
     const subject = await verify(token);
-    const result = await ctx.runMutation(internal.relay.writeFromMcp, {
+    return ctx.runMutation(internal.relay.writeFromMcp, {
       subject,
       command,
     });
-    await ctx.runMutation(internal.mcpActivity.recordSuccess, {
-      subject,
-      operation: "write",
-    });
-    return result;
   },
 });
 
@@ -87,15 +76,10 @@ export const researchRead = action({
     { token, command },
   ): Promise<Awaited<ReturnType<typeof readOwned>>> => {
     const subject = await verify(token);
-    const result = await ctx.runQuery(internal.research.readFromMcp, {
+    return ctx.runQuery(internal.research.readFromMcp, {
       subject,
       command,
     });
-    await ctx.runMutation(internal.mcpActivity.recordSuccess, {
-      subject,
-      operation: "read",
-    });
-    return result;
   },
 });
 export const researchWrite = action({
@@ -106,34 +90,9 @@ export const researchWrite = action({
     { token, command },
   ): Promise<Awaited<ReturnType<typeof writeOwned>>> => {
     const subject = await verify(token);
-    const result = await ctx.runMutation(internal.research.writeFromMcp, {
+    return ctx.runMutation(internal.research.writeFromMcp, {
       subject,
       command,
     });
-    await ctx.runMutation(internal.mcpActivity.recordSuccess, {
-      subject,
-      operation: "write",
-    });
-    return result;
   },
-});
-
-export const testConnection = action({
-  returns: connectionTestResult,
-  args: {
-    token: v.string(),
-    operation: v.union(v.literal("create"), v.literal("remove")),
-  },
-  handler: async (
-    ctx,
-    { token, operation },
-  ): Promise<{
-    testMarker: { id: string; createdAt: number } | null;
-    removed: boolean;
-    path: string;
-  }> =>
-    ctx.runMutation(internal.mcpActivity.testFromMcp, {
-      subject: await verify(token),
-      operation,
-    }),
 });

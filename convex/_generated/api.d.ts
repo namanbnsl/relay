@@ -9,7 +9,6 @@
  */
 
 import type * as mcp from "../mcp.js";
-import type * as mcpActivity from "../mcpActivity.js";
 import type * as model_auth from "../model/auth.js";
 import type * as model_exa from "../model/exa.js";
 import type * as model_researchContracts from "../model/researchContracts.js";
@@ -29,7 +28,6 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   mcp: typeof mcp;
-  mcpActivity: typeof mcpActivity;
   "model/auth": typeof model_auth;
   "model/exa": typeof model_exa;
   "model/researchContracts": typeof model_researchContracts;
