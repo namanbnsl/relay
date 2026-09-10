@@ -65,8 +65,16 @@ export const cancelRemote = internalAction({
 });
 export const advance = internalAction({
   args,
-  returns: v.union(v.literal("done"), v.literal("wait"), v.literal("retry")),
-  handler: async (ctx, { runId }): Promise<"done" | "wait" | "retry"> => {
+  returns: v.union(
+    v.literal("done"),
+    v.literal("wait"),
+    v.literal("retry"),
+    v.literal("continue"),
+  ),
+  handler: async (
+    ctx,
+    { runId },
+  ): Promise<"done" | "wait" | "retry" | "continue"> => {
     let r = await ctx.runQuery(internal.research.owned, { runId });
     if (!isActive(r.state)) {
       if (r.state.kind === "cancelled" && r.occupied) await cancel(ctx, runId);
@@ -218,7 +226,7 @@ export const advance = internalAction({
             ...(c.title ? { title: c.title } : {}),
           })),
         });
-        return "wait";
+        return "continue";
       } catch (error) {
         // A transient status failure gets one retry after a durable 30-second backoff.
         await ctx.runMutation(internal.researchSteps.progress, {
@@ -238,91 +246,109 @@ export const advance = internalAction({
         return "retry";
       }
     }
-    const evidence = await ctx.runQuery(internal.researchSteps.nextEvidence, {
+    const batch = await ctx.runQuery(internal.researchSteps.nextEvidence, {
       runId,
     });
-    if (!evidence) {
+    if (!batch.length) {
       await ctx.runMutation(internal.researchSteps.finish, { runId });
       return "done";
     }
-    if (
-      !(await ctx.runMutation(internal.researchSteps.claimEvidence, {
-        evidenceId: evidence._id,
-      }))
-    ) {
-      if (evidence.attempts >= 2)
+    // Bound network concurrency to nextEvidence's four-source batch. Persist the
+    // resulting snapshots in order so storage writes and their metadata stay paired.
+    const fetched = await Promise.allSettled(
+      batch.map(async (evidence) => {
+        const claimed = await ctx.runMutation(
+          internal.researchSteps.claimEvidence,
+          {
+            evidenceId: evidence._id,
+          },
+        );
+        return claimed ? getContents(evidence.originalUrl) : null;
+      }),
+    );
+    const outcomes: ("retry" | "continue")[] = [];
+    for (const [index, evidence] of batch.entries()) {
+      const fetchedResult = fetched[index];
+      try {
+        if (fetchedResult.status === "rejected") throw fetchedResult.reason;
+        const content = fetchedResult.value;
+        if (content === null) {
+          if (evidence.attempts >= 2)
+            await ctx.runMutation(internal.researchSteps.storeEvidence, {
+              evidenceId: evidence._id,
+              fields: {
+                runId,
+                originalUrl: evidence.originalUrl,
+                canonicalUrl: evidence.canonicalUrl,
+                attempts: evidence.attempts,
+                outcome: {
+                  kind: "failed",
+                  at: Date.now(),
+                  reason:
+                    "Retrieval attempt limit reached; response may have been lost.",
+                },
+              },
+            });
+          continue;
+        }
+        const page = content.results[0];
+        if (!page?.text?.trim())
+          throw new ProviderError("source_content_unavailable");
+        const storageId = await ctx.storage.store(
+          new Blob([page.text], { type: "text/plain;charset=utf-8" }),
+        );
+        await ctx.runMutation(internal.researchSteps.storeEvidence, {
+          evidenceId: evidence._id,
+          fields: {
+            runId,
+            originalUrl: evidence.originalUrl,
+            canonicalUrl: new URL(page.url).href,
+            excerpt: page.text.slice(0, 8000),
+            ...(page.title ? { title: page.title } : {}),
+            ...(page.publishedDate
+              ? {
+                  publishedAt: page.publishedDate,
+                  publicationProvenance: "exa_contents",
+                }
+              : {}),
+            outcome: {
+              kind: "retrieved",
+              storageId,
+              hash: createHash("sha256").update(page.text).digest("hex"),
+              retrievedAt: Date.now(),
+              characters: page.text.length,
+            },
+            attempts: evidence.attempts + 1,
+          },
+          ...(content.costDollars ? { cost: content.costDollars.total } : {}),
+        });
+      } catch (error) {
+        if (
+          evidence.attempts < 1 &&
+          error instanceof ProviderError &&
+          error.retryable
+        ) {
+          outcomes.push("retry");
+          continue;
+        }
         await ctx.runMutation(internal.researchSteps.storeEvidence, {
           evidenceId: evidence._id,
           fields: {
             runId,
             originalUrl: evidence.originalUrl,
             canonicalUrl: evidence.canonicalUrl,
-            attempts: evidence.attempts,
+            ...(evidence.title ? { title: evidence.title } : {}),
+            attempts: evidence.attempts + 1,
             outcome: {
               kind: "failed",
               at: Date.now(),
-              reason:
-                "Retrieval attempt limit reached; response may have been lost.",
+              reason: providerError(error),
             },
           },
         });
-      return "wait";
+      }
+      outcomes.push("continue");
     }
-    try {
-      const content = await getContents(evidence.originalUrl);
-      const page = content.results[0];
-      if (!page?.text?.trim())
-        throw new ProviderError("source_content_unavailable");
-      const storageId = await ctx.storage.store(
-        new Blob([page.text], { type: "text/plain;charset=utf-8" }),
-      );
-      await ctx.runMutation(internal.researchSteps.storeEvidence, {
-        evidenceId: evidence._id,
-        fields: {
-          runId,
-          originalUrl: evidence.originalUrl,
-          canonicalUrl: new URL(page.url).href,
-          ...(page.title ? { title: page.title } : {}),
-          ...(page.publishedDate
-            ? {
-                publishedAt: page.publishedDate,
-                publicationProvenance: "exa_contents",
-              }
-            : {}),
-          outcome: {
-            kind: "retrieved",
-            storageId,
-            hash: createHash("sha256").update(page.text).digest("hex"),
-            retrievedAt: Date.now(),
-            characters: page.text.length,
-          },
-          attempts: evidence.attempts + 1,
-        },
-        ...(content.costDollars ? { cost: content.costDollars.total } : {}),
-      });
-    } catch (error) {
-      if (
-        evidence.attempts < 1 &&
-        error instanceof ProviderError &&
-        error.retryable
-      )
-        return "retry";
-      await ctx.runMutation(internal.researchSteps.storeEvidence, {
-        evidenceId: evidence._id,
-        fields: {
-          runId,
-          originalUrl: evidence.originalUrl,
-          canonicalUrl: evidence.canonicalUrl,
-          ...(evidence.title ? { title: evidence.title } : {}),
-          attempts: evidence.attempts + 1,
-          outcome: {
-            kind: "failed",
-            at: Date.now(),
-            reason: providerError(error),
-          },
-        },
-      });
-    }
-    return "wait";
+    return outcomes.includes("retry") ? "retry" : "continue";
   },
 });

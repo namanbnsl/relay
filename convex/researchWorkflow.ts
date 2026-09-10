@@ -15,7 +15,8 @@ export const execute = workflow
         { retry: false },
       );
       if (next === "done") return null;
-      await step.sleep(next === "retry" ? 30_000 : 15_000);
+      if (next !== "continue")
+        await step.sleep(next === "retry" ? 30_000 : 15_000);
     }
     await step.runMutation(internal.researchSteps.fail, {
       ...args,

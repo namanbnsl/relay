@@ -9,6 +9,7 @@ import {
   contentsResponse,
   startExa,
   getExa,
+  sourceList,
 } from "../convex/model/exa";
 const modules = import.meta.glob("../convex/**/*.ts");
 const provider = {
@@ -62,6 +63,119 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("research ownership and lifecycle using Convex", () => {
+  it("reports 18 references as one retrieved and 17 pending, including after interrupted retrieval", async () => {
+    const { t, owner, topicId } = await setup();
+    const run = await owner.mutation(api.research.write, {
+      command: {
+        kind: "start_research",
+        topicId,
+        requestKey: "failed-session-counts",
+      },
+    });
+    const outputStorageId = await t.run((ctx) =>
+      ctx.storage.store(new Blob(["Provider report"])),
+    );
+    await t.mutation(internal.researchSteps.storePacket, {
+      packet: {
+        runId: run._id,
+        findings: "Report with 18 references",
+        outputStorageId,
+        groundingJson: "[]",
+        gaps: [],
+        createdAt: Date.now(),
+        provenance: "exa_agent",
+        verification: "not_independently_verified",
+        approval: "not_reviewed",
+        providerStatus: "completed",
+      },
+      sources: Array.from({ length: 18 }, (_, i) => ({
+        url: `https://example.org/${i}`,
+      })),
+    });
+    const rows = await t.run((ctx) =>
+      ctx.db.query("researchEvidence").collect(),
+    );
+    const storageId = await t.run((ctx) =>
+      ctx.storage.store(new Blob(["Inspected source text"])),
+    );
+    await t.run((ctx) =>
+      ctx.db.patch(rows[0]._id, {
+        outcome: {
+          kind: "retrieved",
+          storageId,
+          hash: "fixture",
+          retrievedAt: Date.now(),
+          characters: 21,
+        },
+      }),
+    );
+    const before = await owner.query(api.research.read, {
+      command: { kind: "get_research_packet", runId: run._id },
+    });
+    if (before.kind !== "packet") throw new Error("Wrong result");
+    expect(before.progress).toMatchObject({
+      total: 18,
+      retrieved: 1,
+      pending: 17,
+      failed: 0,
+      readiness: "running",
+      recommendedRetryAfterMs: 20000,
+    });
+    expect(before.unresolvedReferences).toHaveLength(17);
+    expect(before.unresolvedReferences[0]).toMatchObject({
+      evidenceId: rows[1]._id,
+      status: "pending",
+      nextAction: expect.stringContaining("Wait"),
+    });
+    await t.mutation(internal.researchSteps.fail, {
+      runId: run._id,
+      reason: "Interrupted retrieval",
+    });
+    const after = await owner.query(api.research.read, {
+      command: { kind: "get_run", runId: run._id },
+    });
+    if (after.kind !== "run") throw new Error("Wrong result");
+    expect(after.run.state.kind).toBe("partial");
+    expect(after.progress).toMatchObject({
+      retrieved: 1,
+      pending: 17,
+      readiness: "needs_attention",
+      recommendedRetryAfterMs: 0,
+    });
+    const unresolved = await owner.query(api.research.read, {
+      command: { kind: "get_evidence", evidenceId: rows[1]._id },
+    });
+    if (unresolved.kind !== "evidence") throw new Error("Wrong result");
+    expect(unresolved.contentUrl).toBeNull();
+    expect(unresolved.nextAction).toContain("retry_run");
+    for (const offset of [-1, 0.5, 30001]) {
+      await expect(
+        owner.query(api.research.read, {
+          command: {
+            kind: "get_evidence",
+            evidenceId: rows[0]._id,
+            offset,
+          },
+        }),
+      ).rejects.toThrow("offset must be an integer");
+    }
+  });
+  it("anchors current research to the request date without requiring a plan", async () => {
+    const { owner, topicId } = await setup();
+    vi.setSystemTime(new Date("2026-09-10T10:00:00Z"));
+    const run = await owner.mutation(api.research.write, {
+      command: {
+        kind: "start_research",
+        topicId,
+        requestKey: "current-research",
+        question: "OpenAI's current mathematical reasoning work",
+      },
+    });
+    expect(run.brief).toContain("2026-09-10");
+    expect(run.brief).toContain("Interpret current/latest as of this date");
+    expect(run.brief).toContain("individually attributable findings");
+    expect(run.effort).toBe("medium");
+  });
   it("remembers deduplicated request keys after the original run finishes", async () => {
     const { t, owner, topicId } = await setup();
     const run = await owner.mutation(api.research.write, {
@@ -233,6 +347,30 @@ describe("research ownership and lifecycle using Convex", () => {
   });
   it("persists useful output as partial when source retrieval fails, preserving review history", async () => {
     const { t, owner, topicId } = await setup();
+    await t.run(async (ctx) => {
+      const id = ctx.db.normalizeId("topics", topicId);
+      if (!id) throw new Error("Invalid topic");
+      const searchId = await ctx.db.insert("workspaceSearches", {
+        topicId: id,
+        query: "Claim",
+        optionsJson: "{}",
+      });
+      const sourceId = await ctx.db.insert("workspaceSources", {
+        topicId: id,
+        searchId,
+        url: "https://example.org",
+        title: "Source",
+        excerpt: "Claim",
+      });
+      await ctx.db.insert("workspaceEvidence", {
+        topicId: id,
+        sourceId,
+        url: "https://example.org",
+        title: "Source",
+        content: "Claim",
+        retrievedAt: Date.now(),
+      });
+    });
     const saved = await owner.mutation(api.relay.write, {
       command: {
         kind: "save_research",
@@ -307,6 +445,92 @@ describe("research ownership and lifecycle using Convex", () => {
       }),
     ).rejects.toThrow();
   });
+  it("retrieves four sources concurrently without marking pending evidence complete", async () => {
+    const { t, owner, topicId } = await setup();
+    const run = await owner.mutation(api.research.write, {
+      command: {
+        kind: "start_research",
+        topicId,
+        requestKey: "parallel-sources",
+      },
+    });
+    const urls = Array.from(
+      { length: 5 },
+      (_, i) => `https://example.org/${i}`,
+    );
+    const remote = {
+      ...provider,
+      output: {
+        text: "Five sources",
+        grounding: [{ field: "text", citations: urls.map((url) => ({ url })) }],
+      },
+    };
+    let active = 0;
+    let peak = 0;
+    const releases: (() => void)[] = [];
+    let signalBatch: () => void = () => {};
+    const batchStarted = new Promise<void>((resolve) => {
+      signalBatch = resolve;
+    });
+    let block = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (!url.endsWith("/contents"))
+          return new Response(
+            JSON.stringify(
+              init?.method === "POST" ? { id: provider.id } : remote,
+            ),
+          );
+        active++;
+        peak = Math.max(peak, active);
+        if (block)
+          await new Promise<void>((resolve) => {
+            releases.push(resolve);
+            if (releases.length === 4) signalBatch();
+          });
+        active--;
+        return new Response(
+          JSON.stringify({
+            results: [{ url: "https://example.org/source", text: "Evidence" }],
+          }),
+        );
+      }),
+    );
+    await t.action(internal.researchActions.advance, { runId: run._id });
+    expect(
+      await t.action(internal.researchActions.advance, { runId: run._id }),
+    ).toBe("continue");
+    await t.mutation(internal.researchSteps.finish, { runId: run._id });
+    expect(
+      (await t.query(internal.research.owned, { runId: run._id })).state.kind,
+    ).toBe("running");
+    const fetching = t.action(internal.researchActions.advance, {
+      runId: run._id,
+    });
+    await batchStarted;
+    expect(peak).toBe(4);
+    block = false;
+    releases.forEach((release) => release());
+    expect(await fetching).toBe("continue");
+    const evidence = await t.run((ctx) =>
+      ctx.db.query("researchEvidence").collect(),
+    );
+    expect(
+      evidence.filter((entry) => entry.outcome.kind === "retrieved"),
+      JSON.stringify(
+        evidence.map((entry) => ({ id: entry._id, outcome: entry.outcome })),
+      ),
+    ).toHaveLength(4);
+    expect(
+      evidence.filter((entry) => entry.outcome.kind === "pending"),
+    ).toHaveLength(1);
+    await t.action(internal.researchActions.advance, { runId: run._id });
+    await t.action(internal.researchActions.advance, { runId: run._id });
+    expect(
+      (await t.query(internal.research.owned, { runId: run._id })).state.kind,
+    ).toBe("succeeded");
+  });
   it("stores successful source content, hashes and dates with provenance", async () => {
     const { t, owner, topicId } = await setup();
     const run = await owner.mutation(api.research.write, {
@@ -347,6 +571,13 @@ describe("research ownership and lifecycle using Convex", () => {
     });
     if (packet.kind !== "packet") throw new Error("Wrong result");
     expect(packet.run.state.kind).toBe("succeeded");
+    expect(packet.progress).toMatchObject({
+      readiness: "ready_for_synthesis",
+      retrieved: 1,
+      pending: 0,
+      failed: 0,
+    });
+    expect(packet.evidence[0].excerpt).toBe("Original retrieved text");
     expect(packet.evidence[0].publicationProvenance).toBe("exa_contents");
     const outcome = packet.evidence[0].outcome;
     if (outcome.kind !== "retrieved") throw new Error("Not retrieved");
@@ -705,6 +936,21 @@ describe("definitive submission rejections", () => {
   });
 });
 describe("provider boundary fixtures (not live validation)", () => {
+  it("retrieves report citations omitted from grounding without duplicating shared URLs", () => {
+    const sources = sourceList(
+      exaRun.parse({
+        ...provider,
+        output: {
+          ...provider.output,
+          text: "[Source](https://example.org/source) and [Another](https://example.org/another)",
+        },
+      }),
+    );
+    expect(sources.map((source) => source.url)).toEqual([
+      "https://example.org/source",
+      "https://example.org/another",
+    ]);
+  });
   it("accepts documented nullable request metadata without retaining unrelated fields", () => {
     expect(exaRun.parse({ ...provider, request: null }).request).toBeNull();
     expect(

@@ -39,9 +39,20 @@ export function useDraftProtection(dirty: boolean) {
         event.stopPropagation();
       }
     };
+    const originalUrl = window.location.href;
+    const beforeHistoryNavigation = (event: PopStateEvent) => {
+      if (
+        !window.confirm("Discard your unsaved changes and leave this document?")
+      ) {
+        event.stopImmediatePropagation();
+        window.history.pushState(null, "", originalUrl);
+      }
+    };
+    window.addEventListener("popstate", beforeHistoryNavigation, true);
     window.addEventListener("beforeunload", beforeUnload);
     document.addEventListener("click", beforeNavigate, true);
     return () => {
+      window.removeEventListener("popstate", beforeHistoryNavigation, true);
       window.removeEventListener("beforeunload", beforeUnload);
       document.removeEventListener("click", beforeNavigate, true);
     };
@@ -132,7 +143,7 @@ export function AgentPrompt({ prompt }: { prompt: string }) {
       trigger={
         <Button variant="outline">
           <ArrowUpRight aria-hidden />
-          Continue with agent
+          Copy agent prompt
         </Button>
       }
     >

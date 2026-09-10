@@ -3,6 +3,9 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { readCommand, writeCommand, writeResult } from "./validators";
 
+import { latestDraft, writeDraft, resolveEvidence } from "./drafts";
+import { publicRun } from "../research";
+
 type Reader = Pick<QueryCtx, "db">;
 type Actor = { subject: string; channel: "web" | "mcp" };
 type Result = Infer<typeof writeResult>;
@@ -125,7 +128,28 @@ export async function readWorkflow(
           .order("desc")
           .take(10),
       ]);
-      return { kind: "topic" as const, topic, research, scripts };
+      const [draft, runs, sources] = await Promise.all([
+        latestDraft(ctx, topic._id),
+        ctx.db
+          .query("researchRuns")
+          .withIndex("by_topic", (q) => q.eq("topicId", topic._id))
+          .order("desc")
+          .take(20),
+        ctx.db
+          .query("workspaceSources")
+          .withIndex("by_topic", (q) => q.eq("topicId", topic._id))
+          .order("desc")
+          .take(100),
+      ]);
+      return {
+        kind: "topic" as const,
+        topic,
+        research,
+        scripts,
+        draft,
+        runs: runs.map(publicRun),
+        sources,
+      };
     }
   }
 }
@@ -134,6 +158,11 @@ export async function writeWorkflow(
   actor: Actor,
   command: Infer<typeof writeCommand>,
 ): Promise<Result> {
+  if (
+    command.kind === "save_research_draft" ||
+    command.kind === "submit_research"
+  )
+    return writeDraft(ctx, actor.subject, command);
   if (command.kind === "create_project") {
     const name = command.name.trim();
     text(name, "Project name", 160);
@@ -154,6 +183,48 @@ export async function writeWorkflow(
     const question = command.question.trim();
     text(title, "Title", 160);
     text(question, "Question", 12000);
+    if (command.requestKey !== undefined) {
+      text(command.requestKey, "Request key", 128);
+      if (command.requestKey.length < 8)
+        fail("Request key must have at least 8 characters.");
+      const requestKey = command.requestKey;
+      const receipt = await ctx.db
+        .query("topicRequests")
+        .withIndex("by_request", (q) =>
+          q.eq("owner", actor.subject).eq("requestKey", requestKey),
+        )
+        .unique();
+      if (receipt) {
+        if (
+          receipt.projectId !== project._id ||
+          receipt.title !== title ||
+          receipt.question !== question
+        )
+          fail("Request key already used with different inputs.");
+        await topicFor(ctx, actor.subject, receipt.topicId);
+        return {
+          id: receipt.topicId,
+          projectId: project._id,
+          topicId: receipt.topicId,
+          status: "created",
+        };
+      }
+      const id = await ctx.db.insert("topics", {
+        projectId: project._id,
+        title,
+        question,
+      });
+      await ctx.db.insert("topicRequests", {
+        owner: actor.subject,
+        requestKey: command.requestKey,
+        topicId: id,
+        projectId: project._id,
+        title,
+        question,
+      });
+      return { id, projectId: project._id, topicId: id, status: "created" };
+    }
+    // Legacy clients without request keys retain title-based deduplication.
     const old = await ctx.db
       .query("topics")
       .withIndex("by_project_title", (q) =>
@@ -173,6 +244,29 @@ export async function writeWorkflow(
   }
   if (command.kind === "save_research") {
     const topic = await topicFor(ctx, actor.subject, command.topicId);
+    if (command.findings) {
+      if (command.claims) fail("Supply findings or claims, not both.");
+      if (command.expectedRevision === undefined)
+        fail(
+          "Read the topic and pass its current revision as expectedRevision.",
+        );
+      const previous = await latestDraft(ctx, topic._id);
+      if (
+        command.baseId !== undefined &&
+        command.baseId !== (await latestResearch(ctx, topic._id))?._id
+      )
+        fail("Revision conflict. Reopen the latest research.");
+      return writeDraft(ctx, actor.subject, {
+        kind: "save_research_draft",
+        topicId: topic._id,
+        expectedRevision: command.expectedRevision,
+        summary: command.summary,
+        findings: command.findings,
+        plan: previous?.plan ?? "",
+        openQuestions: previous?.openQuestions ?? [],
+      });
+    }
+    if (!command.claims) fail("Supply sourced findings to save research.");
     text(command.summary, "Summary", 20000);
     if (!command.claims.length || command.claims.length > 50)
       fail("Research needs 1–50 findings.");
@@ -182,7 +276,7 @@ export async function writeWorkflow(
         fail("Finding is too large.");
       for (const source of claim.evidence) {
         text(source.title, "Source title", 500);
-        text(source.excerpt, "Excerpt", 8000);
+        if (source.excerpt.length > 8000) fail("Excerpt is too large.");
         let url: URL;
         try {
           url = new URL(source.url);
@@ -203,23 +297,128 @@ export async function writeWorkflow(
           fail("Invalid retrieval time.");
       }
     }
-    if (new TextEncoder().encode(researchContent(command)).byteLength > 200000)
-      fail("Research is too large.");
     const latest = await latestResearch(ctx, topic._id);
-    if (latest && researchContent(latest) === researchContent(command))
-      return saved(latest, topic);
-    if (command.baseId !== undefined && command.baseId !== latest?._id)
+    const previous = await latestDraft(ctx, topic._id);
+    const workspace = await ctx.db
+      .query("workspaceEvidence")
+      .withIndex("by_topic", (q) => q.eq("topicId", topic._id))
+      .collect();
+    const runs = await ctx.db
+      .query("researchRuns")
+      .withIndex("by_topic", (q) => q.eq("topicId", topic._id))
+      .collect();
+    const providerEvidence = (
+      await Promise.all(
+        runs.map((run) =>
+          ctx.db
+            .query("researchEvidence")
+            .withIndex("by_run", (q) => q.eq("runId", run._id))
+            .collect(),
+        ),
+      )
+    ).flat();
+    const claims = await Promise.all(
+      command.claims.map(async (claim) => {
+        if (!claim.evidence.length)
+          fail(
+            `Finding "${claim.text}" needs retrieved evidence. Retrieve its sources or remove the unsupported finding.`,
+          );
+        return {
+          ...claim,
+          evidence: await Promise.all(
+            claim.evidence.map(async (source) => {
+              const existing = latest?.claims
+                .flatMap((c) => c.evidence)
+                .find(
+                  (e) => e.url === source.url && e.excerpt === source.excerpt,
+                );
+              const direct = workspace.find((e) => e.url === source.url);
+              const candidates = providerEvidence.filter(
+                (e) =>
+                  e.canonicalUrl === source.url || e.originalUrl === source.url,
+              );
+              const reference =
+                source.evidenceId ??
+                existing?.evidenceId ??
+                direct?._id ??
+                candidates.find((e) => e.outcome.kind === "retrieved")?._id ??
+                candidates[0]?._id;
+              if (reference) {
+                const resolved = await resolveEvidence(
+                  ctx,
+                  actor.subject,
+                  topic._id,
+                  reference,
+                );
+                return {
+                  evidenceId: resolved.id,
+                  url: resolved.url,
+                  title: resolved.title,
+                  excerpt: resolved.excerpt.slice(0, 8000),
+                  retrievedAt: resolved.retrievedAt,
+                };
+              }
+              // Historical imported documents remain editable without manufacturing a
+              // retrieved evidence record from their user-supplied excerpts.
+              if (existing) return existing;
+              fail(
+                `Source ${source.url} has no retrieved evidence in this topic. Use search_sources/read_sources before saving. Supplied excerpts are not retrieved evidence.`,
+              );
+            }),
+          ),
+        };
+      }),
+    );
+    const normalized = { summary: command.summary, claims };
+    if (
+      new TextEncoder().encode(researchContent(normalized)).byteLength > 500000
+    )
+      fail("Research is too large.");
+    if (latest && researchContent(latest) === researchContent(normalized))
+      return {
+        ...saved(latest, topic),
+        revision: latest.draftRevision ?? previous?.revision ?? 0,
+      };
+    if (
+      (command.baseId !== undefined && command.baseId !== latest?._id) ||
+      (command.expectedRevision !== undefined &&
+        command.expectedRevision !== (previous?.revision ?? 0))
+    )
       fail(
-        "Research changed while you were editing. Reopen the latest document.",
+        "Revision conflict. Research changed while you were editing. Reopen the latest document.",
       );
-    const id = await ctx.db.insert("researchVersions", {
-      topicId: topic._id,
-      summary: command.summary,
-      claims: command.claims,
-      review: { kind: "pending" },
-    });
-    return saved({ _id: id, review: { kind: "pending" } }, topic);
+    if (
+      latest &&
+      command.baseId === undefined &&
+      command.expectedRevision === undefined
+    )
+      fail(
+        "Read the current research and pass its revision as expectedRevision or its document ID as baseId before editing.",
+      );
+    return writeDraft(
+      ctx,
+      actor.subject,
+      {
+        kind: "save_research_draft",
+        topicId: topic._id,
+        expectedRevision: previous?.revision ?? 0,
+        summary: command.summary,
+        plan: previous?.plan ?? "",
+        openQuestions: previous?.openQuestions ?? [],
+        findings: claims.map((claim, index) => ({
+          id: latest?.findings?.[index]?.id ?? `finding-${index + 1}`,
+          text: claim.text,
+          assessment: claim.assessment,
+          note: claim.note,
+          evidenceIds: claim.evidence.flatMap((e) =>
+            e.evidenceId ? [e.evidenceId] : [],
+          ),
+        })),
+      },
+      claims,
+    );
   }
+
   if (command.kind === "save_script") {
     const { row: source, topic } = await researchFor(
       ctx,

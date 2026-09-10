@@ -268,6 +268,7 @@ export function Project({ projectId }: { projectId: string }) {
   const { write, pending, error } = useRelayWrite();
   const searchParams = useSearchParams();
   const selected = searchParams.get("topic") ?? "";
+  const topicRequest = useRef<string | null>(null);
   function setSelected(topicId: string) {
     const params = new URLSearchParams(searchParams.toString());
     if (topicId) params.set("topic", topicId);
@@ -367,11 +368,13 @@ export function Project({ projectId }: { projectId: string }) {
               action={async (values) => {
                 const result = await write({
                   kind: "create_topic",
+                  requestKey: (topicRequest.current ??= crypto.randomUUID()),
                   projectId,
                   title: String(values.get("title") ?? ""),
                   question: String(values.get("question") ?? ""),
                 });
                 if (result) {
+                  topicRequest.current = null;
                   setAdding(false);
                   setSelected(result.id);
                 }
@@ -485,14 +488,9 @@ function Topic({
         All topics
       </button>
       <WorkspaceHeading title={data.topic.title} />
-      <details className="workspace-brief">
-        <summary>
-          Research question <ChevronRight size={14} aria-hidden />
-        </summary>
-        <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
-          {data.topic.question}
-        </p>
-      </details>
+      <p className="mb-6 max-w-[720px] whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
+        {data.topic.question}
+      </p>
       <div className="workspace-document-nav">
         <nav aria-label="Topic sections" className="flex gap-5">
           {(["research", "script"] satisfies Array<typeof tab>).map((item) => (
@@ -518,9 +516,7 @@ function Topic({
           scripts={data.scripts}
         />
       </div>
-      {tab === "research" ? (
-        <ResearchExecution key={topicId} topicId={topicId} />
-      ) : null}
+      {tab === "research" ? <ResearchExecution topicId={topicId} /> : null}
       <TopicDocument
         tab={tab}
         latest={latest}
@@ -619,7 +615,7 @@ function TopicDocument({
             description="Ask your connected agent to investigate this question. Review the findings here when they’re ready."
           >
             <AgentPrompt
-              prompt={`Find the Relay topic “${data.topic.title}”. Research its question, save findings with supporting sources to Relay, and stop for my review.`}
+              prompt={`Research the Relay topic “${data.topic.title}” (topic ID ${data.topic._id}) in project ${data.topic.projectId}. Investigate: ${data.topic.question} Read supporting sources, resolve important gaps, and save the completed research in Relay for my review. Continue through research and saving without asking me to manage intermediate steps.`}
             />
           </EmptyDocument>
         )
@@ -673,16 +669,18 @@ function Review({
   row,
   kind,
   blocked = false,
+  compact = false,
 }: {
   row: Doc<"researchVersions"> | Doc<"scriptVersions">;
   kind: "research" | "script";
   blocked?: boolean;
+  compact?: boolean;
 }) {
   const { write, pending, error } = useRelayWrite();
   const [note, setNote] = useState("");
   const [requesting, setRequesting] = useState(false);
   return (
-    <div className="workspace-review">
+    <div className={`workspace-review ${compact ? "!mt-0 mb-7" : ""}`}>
       <div className="flex items-center gap-2 text-sm font-medium">
         {row.review.kind === "approved" ? (
           <Check size={16} aria-hidden />
@@ -715,7 +713,7 @@ function Review({
             ) : (
               <Check aria-hidden />
             )}
-            {pending ? "Saving…" : `Approve ${kind}`}
+            {pending ? "Saving…" : "Approve"}
           </Button>
           <WorkspaceDialog
             open={requesting}
@@ -825,6 +823,17 @@ function Research({
           </Button>
         </div>
       ) : null}
+      {!readOnly && !editing ? (
+        <Review
+          row={row}
+          kind="research"
+          compact
+          blocked={row.claims.some(
+            (claim) =>
+              claim.assessment !== "supported" || claim.evidence.length === 0,
+          )}
+        />
+      ) : null}
       {editing ? (
         <form
           className="grid gap-6"
@@ -841,8 +850,15 @@ function Research({
         >
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Pencil size={13} aria-hidden />
-            Editing research · Changes are saved as a new version
+            Editing research
           </div>
+          {baseId !== row._id ? (
+            <p role="alert" className="text-sm text-destructive">
+              New research was saved while you were editing. Your changes are
+              still here. Copy them before cancelling to load the latest
+              version.
+            </p>
+          ) : null}
           <Field label="Summary">
             <Textarea
               disabled={pending}
@@ -910,7 +926,7 @@ function Research({
             </div>
           ))}
           <div className="flex gap-3">
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending || baseId !== row._id}>
               {pending ? "Saving…" : "Save changes"}
             </Button>
             <Button
@@ -943,109 +959,85 @@ function Research({
           <p className="whitespace-pre-wrap text-[15px] leading-7">
             {row.summary}
           </p>
-          <h2 className="mb-2 mt-10 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Key findings
-          </h2>
-          <div className="space-y-2">
+          <div className="mt-8 space-y-6">
             {row.claims.map((claim, index) => (
-              <article
-                key={index}
-                className="relative border-b border-border py-6 ps-9 last:border-0"
-              >
-                <span className="absolute start-0 top-6 text-xs tabular-nums text-muted-foreground">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <p className="text-[15px] leading-7">{claim.text}</p>
-                <p className="mt-3 text-xs font-medium text-muted-foreground">
-                  <span className="capitalize">{claim.assessment}</span>
-                  {claim.assessment !== "supported" && claim.note
-                    ? ` · ${claim.note}`
-                    : " · Agent assessment"}
+              <article key={index}>
+                <p className="whitespace-pre-wrap text-[15px] leading-7">
+                  {claim.text}{" "}
+                  {claim.evidence.map((source, sourceIndex) => (
+                    <sup key={sourceKey(source)} className="ms-1">
+                      <a
+                        href={source.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={source.title}
+                        aria-label={`Source ${index + 1}.${sourceIndex + 1}: ${source.title}`}
+                        className="rounded-sm px-1 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:outline-2"
+                      >
+                        [{index + 1}.{sourceIndex + 1}]
+                      </a>
+                    </sup>
+                  ))}
                 </p>
-                <div className="mt-2">
-                  <WorkspaceDialog
-                    title="Supporting sources"
-                    description={claim.text}
-                    trigger={
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        className="text-muted-foreground"
-                      >
-                        <ArrowUpRight aria-hidden />
-                        {claim.evidence.length === 1
-                          ? "1 source"
-                          : `${claim.evidence.length} sources`}
-                      </Button>
-                    }
-                  >
-                    {claim.note ? (
-                      <p className="mb-5 text-sm leading-6 text-muted-foreground">
-                        {claim.note}
-                      </p>
-                    ) : null}
-                    {!claim.evidence.length ? (
-                      <p className="text-sm">
-                        No sources attached. Request sources before approving
-                        this finding.
-                      </p>
-                    ) : null}
-                    {claim.evidence.map((source) => (
-                      <div
-                        key={sourceKey(source)}
-                        className="mt-6 border-t border-border pt-5"
-                      >
-                        <a
-                          href={source.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="underline underline-offset-4"
-                        >
-                          {source.title}
-                        </a>
-                        <blockquote className="my-2 border-s-2 border-border ps-4 leading-7">
-                          {source.excerpt}
-                        </blockquote>
-                        <p className="text-xs text-muted-foreground">
-                          Agent-supplied
-                          {source.retrievedAt === undefined
-                            ? ""
-                            : ` · Retrieved ${new Date(source.retrievedAt).toLocaleDateString("en-US", { timeZone: "UTC" })}`}
-                        </p>
-                      </div>
-                    ))}
-                  </WorkspaceDialog>
-                </div>
+                {claim.assessment !== "supported" ? (
+                  <p className="mt-2 text-xs leading-6 text-muted-foreground">
+                    <span className="capitalize">{claim.assessment}</span>
+                    {claim.note ? ` · ${claim.note}` : ""}
+                  </p>
+                ) : null}
               </article>
             ))}
           </div>
-          {readOnly ? (
-            row.review.kind === "changes_requested" ? (
-              <p className="mt-4 text-sm">{row.review.note}</p>
-            ) : null
-          ) : (
-            <>
-              {row.claims.some(
-                (claim) =>
-                  claim.assessment !== "supported" ||
-                  claim.evidence.length === 0,
-              ) ? (
-                <p className="mt-6 text-sm text-muted-foreground">
-                  Some findings need supporting evidence. Edit the research or
-                  request changes before approving.
-                </p>
-              ) : null}
-              <Review
-                row={row}
-                kind="research"
-                blocked={row.claims.some(
-                  (claim) =>
-                    claim.assessment !== "supported" ||
-                    claim.evidence.length === 0,
-                )}
-              />
-            </>
-          )}
+          <details className="mt-10 border-t border-border py-4">
+            <summary className="min-h-9 cursor-pointer text-sm font-medium">
+              Sources
+            </summary>
+            {row.claims.map((claim, index) => (
+              <div key={index} className="mt-5 space-y-4">
+                {!claim.evidence.length ? (
+                  <p className="text-sm text-muted-foreground">
+                    Finding {index + 1} has no attached sources.
+                  </p>
+                ) : null}
+                {claim.evidence.map((source, sourceIndex) => (
+                  <details key={sourceKey(source)} className="text-sm">
+                    <summary className="cursor-pointer leading-6">
+                      [{index + 1}.{sourceIndex + 1}] {source.title}
+                    </summary>
+                    <a
+                      href={source.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 inline-block break-all underline underline-offset-4"
+                    >
+                      Open source
+                    </a>
+                    <p className="my-3 whitespace-pre-wrap leading-7">
+                      {source.excerpt}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {source.retrievedAt === undefined
+                        ? "Source supplied with this document"
+                        : `Retrieved ${new Date(source.retrievedAt).toLocaleDateString("en-US", { timeZone: "UTC" })}`}
+                    </p>
+                  </details>
+                ))}
+              </div>
+            ))}
+          </details>
+          {readOnly && row.review.kind === "changes_requested" ? (
+            <p className="mt-4 text-sm">{row.review.note}</p>
+          ) : null}
+          {!readOnly &&
+          row.claims.some(
+            (claim) =>
+              claim.assessment !== "supported" || claim.evidence.length === 0,
+          ) ? (
+            <p className="mt-6 text-sm text-muted-foreground">
+              Some findings need supporting evidence. Edit the research or
+              request changes before approving.
+            </p>
+          ) : null}
         </>
       )}
     </section>

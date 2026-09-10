@@ -134,8 +134,7 @@ export async function startExa(args: {
   // No documented idempotency header: never retry this POST automatically.
   const raw = await request("/agent/runs", {
     query: args.brief,
-    systemPrompt:
-      "Research public web sources only. Return findings, citations and coverage gaps. Never use contact enrichment, premium data sources or purchase contact data.",
+    systemPrompt: `Research public web sources only. Today is ${new Date().toISOString().slice(0, 10)}. Respect an explicitly requested historical period; otherwise check current sources for latest/current questions. Read primary sources before making factual assertions, cite the specific supporting pages, and distinguish source statements from inference. Seek independent corroboration for exceptional scientific claims; omit unsupported claims rather than inventing announcements or URLs. Return a focused answer to the research question with citations and concrete coverage gaps, not a generic company overview. Never use contact enrichment, premium data sources or purchase contact data.`,
     effort: args.effort,
     metadata: { relayRunId: args.runId },
   });
@@ -185,16 +184,54 @@ export async function getContents(url: string) {
   return parsed.data;
 }
 export function sourceList(run: z.infer<typeof exaRun>) {
-  return [
-    ...new Map(
-      (run.output?.grounding ?? [])
-        .flatMap((g) => g.citations)
-        .map((c) => [c.url, c]),
-    ).values(),
-  ];
+  const sources = new Map<string, z.infer<typeof citation>>();
+  for (const entry of (run.output?.grounding ?? []).flatMap((g) => g.citations))
+    sources.set(entry.url, entry);
+  // Providers may cite pages in the report but omit them from structured grounding.
+  // These are retrieval candidates only, never evidence until Contents succeeds.
+  for (const match of (run.output?.text ?? "").matchAll(
+    /\[([^\]\n]{1,1000})\]\((https?:\/\/[^\s<>]+?)\)/g,
+  )) {
+    const parsed = citation.safeParse({ title: match[1], url: match[2] });
+    if (parsed.success && !sources.has(parsed.data.url))
+      sources.set(parsed.data.url, parsed.data);
+  }
+  return [...sources.values()];
 }
 export function providerError(error: unknown) {
   return error instanceof ProviderError
     ? error.code
     : "provider_processing_failed";
+}
+
+export async function searchExa(options: {
+  query: string;
+  numResults: number;
+  includeDomains?: string[];
+  excludeDomains?: string[];
+  startPublishedDate?: string;
+  endPublishedDate?: string;
+}) {
+  const parsed = z
+    .object({
+      results: z
+        .array(
+          z.object({
+            url: webUrl,
+            title: z.string().max(1000).nullish(),
+            highlights: z.array(z.string().max(8000)).max(20).nullish(),
+          }),
+        )
+        .max(10),
+      costDollars: z.object({ total: z.number().nonnegative() }).optional(),
+    })
+    .safeParse(
+      await request("/search", {
+        ...options,
+        type: "auto",
+        contents: { highlights: { maxCharacters: 2000 } },
+      }),
+    );
+  if (!parsed.success) throw new ProviderError("provider_invalid_search");
+  return parsed.data;
 }

@@ -10,6 +10,8 @@
 
 import type * as mcp from "../mcp.js";
 import type * as model_auth from "../model/auth.js";
+import type * as model_draftContracts from "../model/draftContracts.js";
+import type * as model_drafts from "../model/drafts.js";
 import type * as model_exa from "../model/exa.js";
 import type * as model_researchContracts from "../model/researchContracts.js";
 import type * as model_validators from "../model/validators.js";
@@ -19,6 +21,8 @@ import type * as research from "../research.js";
 import type * as researchActions from "../researchActions.js";
 import type * as researchSteps from "../researchSteps.js";
 import type * as researchWorkflow from "../researchWorkflow.js";
+import type * as sourceActions from "../sourceActions.js";
+import type * as sources from "../sources.js";
 
 import type {
   ApiFromModules,
@@ -29,6 +33,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   mcp: typeof mcp;
   "model/auth": typeof model_auth;
+  "model/draftContracts": typeof model_draftContracts;
+  "model/drafts": typeof model_drafts;
   "model/exa": typeof model_exa;
   "model/researchContracts": typeof model_researchContracts;
   "model/validators": typeof model_validators;
@@ -38,6 +44,8 @@ declare const fullApi: ApiFromModules<{
   researchActions: typeof researchActions;
   researchSteps: typeof researchSteps;
   researchWorkflow: typeof researchWorkflow;
+  sourceActions: typeof sourceActions;
+  sources: typeof sources;
 }>;
 
 /**

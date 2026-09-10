@@ -1,5 +1,6 @@
 "use node";
-import type { readOwned, writeOwned } from "./research";
+import { sourceCommand, sourceResult } from "./model/draftContracts";
+import type { writeOwned } from "./research";
 import {
   readResearchCommand,
   writeResearchCommand,
@@ -74,12 +75,61 @@ export const researchRead = action({
   handler: async (
     ctx,
     { token, command },
-  ): Promise<Awaited<ReturnType<typeof readOwned>>> => {
+  ): Promise<Infer<typeof researchReadResult>> => {
     const subject = await verify(token);
-    return ctx.runQuery(internal.research.readFromMcp, {
+    const result = await ctx.runQuery(internal.research.readFromMcp, {
       subject,
       command,
     });
+    // Read only storage IDs from the ownership-checked result, never caller URLs.
+    if (result.kind === "packet") {
+      const sourceContent = await Promise.all(
+        result.evidence.flatMap((evidence) => {
+          if (evidence.outcome.kind !== "retrieved") return [];
+          const storageId = evidence.outcome.storageId;
+          return [
+            ctx.storage.get(storageId).then(async (blob) => {
+              if (!blob)
+                throw new ConvexError(
+                  `Retrieved content unavailable for evidence ${evidence._id}. Retry retrieval or use another source.`,
+                );
+              const content = await blob.text();
+              return {
+                evidenceId: evidence._id,
+                content: content.slice(0, 1600),
+                truncated: content.length > 1600,
+              };
+            }),
+          ];
+        }),
+      );
+      return { ...result, sourceContent };
+    }
+    if (result.kind === "evidence") {
+      const evidence = result.evidence;
+      const offset =
+        command.kind === "get_evidence" ? (command.offset ?? 0) : 0;
+      const page = (content: string) => ({
+        content: content.slice(offset, offset + 20000),
+        truncated: content.length > offset + 20000,
+        contentLength: content.length,
+        ...(content.length > offset + 20000
+          ? { nextOffset: offset + 20000 }
+          : {}),
+      });
+      if ("content" in evidence)
+        return { ...result, ...page(evidence.content) };
+      if (evidence.outcome.kind === "retrieved") {
+        const blob = await ctx.storage.get(evidence.outcome.storageId);
+        if (!blob)
+          throw new ConvexError(
+            `Retrieved content unavailable for evidence ${evidence._id}. Retry retrieval or use another source.`,
+          );
+        const content = await blob.text();
+        return { ...result, ...page(content) };
+      }
+    }
+    return result;
   },
 });
 export const researchWrite = action({
@@ -94,5 +144,17 @@ export const researchWrite = action({
       subject,
       command,
     });
+  },
+});
+
+export const sources = action({
+  args: { token: v.string(), command: sourceCommand },
+  returns: sourceResult,
+  handler: async (
+    ctx,
+    { token, command },
+  ): Promise<Infer<typeof sourceResult>> => {
+    const subject = await verify(token);
+    return ctx.runAction(internal.sourceActions.execute, { subject, command });
   },
 });

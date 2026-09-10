@@ -1,4 +1,13 @@
 import { v } from "convex/values";
+import {
+  draftDoc,
+  evidenceId,
+  draftWriteCommands,
+  finding,
+  findingWrite,
+  sourceDoc,
+} from "./draftContracts";
+import { publicRunResult } from "./researchContracts";
 
 export const review = v.union(
   v.object({ kind: v.literal("pending") }),
@@ -15,6 +24,7 @@ export const review = v.union(
   }),
 );
 export const evidence = v.object({
+  evidenceId: v.optional(evidenceId),
   url: v.string(),
   title: v.string(),
   excerpt: v.string(),
@@ -42,6 +52,9 @@ export const topicFields = {
 };
 export const researchFields = {
   topicId: v.id("topics"),
+  draftId: v.optional(v.id("researchDrafts")),
+  draftRevision: v.optional(v.number()),
+  findings: v.optional(v.array(finding)),
   summary: v.string(),
   claims: v.array(claim),
   review,
@@ -79,9 +92,11 @@ export const readCommand = v.union(
   v.object({ kind: v.literal("topic"), topicId: v.string() }),
 );
 export const writeCommand = v.union(
+  ...draftWriteCommands,
   v.object({ kind: v.literal("create_project"), name: v.string() }),
   v.object({
     kind: v.literal("create_topic"),
+    requestKey: v.optional(v.string()),
     projectId: v.string(),
     title: v.string(),
     question: v.string(),
@@ -90,7 +105,21 @@ export const writeCommand = v.union(
     kind: v.literal("save_research"),
     topicId: v.string(),
     summary: v.string(),
-    claims: v.array(claim),
+    claims: v.optional(
+      v.array(
+        v.object({
+          ...claim.fields,
+          evidence: v.array(
+            v.object({
+              ...evidence.fields,
+              evidenceId: v.optional(v.string()),
+            }),
+          ),
+        }),
+      ),
+    ),
+    findings: v.optional(v.array(findingWrite)),
+    expectedRevision: v.optional(v.number()),
     baseId: v.optional(v.string()),
   }),
   v.object({
@@ -125,6 +154,9 @@ export const readResult = v.union(
     topic: topicDoc,
     research: v.array(researchDoc),
     scripts: v.array(scriptDoc),
+    draft: v.union(draftDoc, v.null()),
+    runs: v.array(publicRunResult),
+    sources: v.array(sourceDoc),
   }),
 );
 export const writeResult = v.object({
@@ -132,4 +164,5 @@ export const writeResult = v.object({
   projectId: v.string(),
   topicId: v.union(v.string(), v.null()),
   status: v.string(),
+  revision: v.optional(v.number()),
 });

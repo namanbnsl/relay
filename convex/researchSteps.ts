@@ -142,7 +142,7 @@ export const storePacket = internalMutation({
 });
 export const nextEvidence = internalQuery({
   args,
-  returns: v.union(evidenceDocument, v.null()),
+  returns: v.array(evidenceDocument),
   handler: async (ctx, { runId }) => {
     const r = await ctx.db.get(runId);
     if (!r) throw new Error("Run not found");
@@ -151,7 +151,7 @@ export const nextEvidence = internalQuery({
       .query("researchEvidence")
       .withIndex("by_run", (q) => q.eq("runId", runId))
       .take(20);
-    return rows.find((r) => r.outcome.kind === "pending") ?? null;
+    return rows.filter((r) => r.outcome.kind === "pending").slice(0, 4);
   },
 });
 export const claimEvidence = internalMutation({
@@ -214,8 +214,15 @@ export const finish = internalMutation({
       .query("researchEvidence")
       .withIndex("by_run", (q) => q.eq("runId", runId))
       .take(20);
+    // A result packet can exist while retrieval is still running. Never finish early.
+    if (evidence.some((e) => e.outcome.kind === "pending")) return;
     const gaps = [
       ...p.gaps,
+      ...(evidence.length === 0
+        ? [
+            "No source text was retrieved. Search and read sources before synthesizing supported findings.",
+          ]
+        : []),
       ...evidence
         .filter((e) => e.outcome.kind !== "retrieved")
         .map((e) => `Source retrieval incomplete: ${e.originalUrl}`),
