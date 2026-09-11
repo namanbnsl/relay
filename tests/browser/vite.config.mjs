@@ -6,6 +6,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": root,
+      "@clerk/nextjs": fileURLToPath(
+        new URL("./clerk-fixture.jsx", import.meta.url),
+      ),
       "convex/react": fileURLToPath(
         new URL("./convex-fixture.jsx", import.meta.url),
       ),

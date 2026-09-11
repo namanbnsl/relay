@@ -29,8 +29,9 @@ export const cycle = internalMutation({
     const t = await ctx.db.get(a.topicId);
     if (
       !t ||
-      t.frequency?.kind !== "daily" ||
-      t.frequency.paused ||
+      !t.frequency ||
+      t.frequency.kind === "once" ||
+      (t.frequency.kind === "daily" && t.frequency.paused) ||
       (t.status ?? "active") !== "active" ||
       t.scheduleGeneration !== a.generation ||
       t.nextResearchAt !== a.due ||
@@ -40,13 +41,18 @@ export const cycle = internalMutation({
     const project = await ctx.db.get(t.projectId);
     if (!project) return;
     // Advance from now, never replay every missed daily slot.
-    await ctx.db.patch(t._id, {
-      nextResearchAt: nextStart(
-        Date.now(),
-        t.frequency.time,
-        t.frequency.timezone,
-      ),
-    });
+    const next =
+      t.frequency.kind === "daily"
+        ? nextStart(Date.now(), t.frequency.time, t.frequency.timezone)
+        : undefined;
+    await ctx.db.patch(t._id, { nextResearchAt: next });
+    if (next !== undefined) {
+      await ctx.scheduler.runAt(next, internal.schedules.cycle, {
+        topicId: t._id,
+        generation: a.generation,
+        due: next,
+      });
+    }
     const receipt = await ctx.db
       .query("investigations")
       .withIndex("by_cycle", (q) =>

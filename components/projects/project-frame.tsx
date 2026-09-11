@@ -103,6 +103,17 @@ export function ProjectFrame({
             <Link href="/projects" className="workspace-nav-item">
               All workspaces
             </Link>
+            {projects?.kind === "projects"
+              ? projects.projects.map((project) => (
+                  <Link
+                    key={project._id}
+                    href={`/projects/${project._id}`}
+                    className="workspace-nav-item"
+                  >
+                    {project.name}
+                  </Link>
+                ))
+              : null}
           </div>
         </details>
         <div className="mt-auto flex items-center gap-3 pt-4">
@@ -136,7 +147,7 @@ export function ProjectFrame({
             {!hydrated
               ? "Connecting…"
               : connection.isWebSocketConnected
-                ? "Live updates"
+                ? ""
                 : "Reconnecting…"}
             {hydrated && !connection.isWebSocketConnected ? (
               <span className="sr-only">

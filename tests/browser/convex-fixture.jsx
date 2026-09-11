@@ -81,14 +81,45 @@ const subscribe = (callback) => {
   listeners.add(callback);
   return () => listeners.delete(callback);
 };
-export function useQuery(reference) {
+export function useConvexAuth() {
+  return { isAuthenticated: true, isLoading: false };
+}
+export function useConvexConnectionState() {
+  return { isWebSocketConnected: true };
+}
+export function usePaginatedQuery() {
+  return { results: [], status: "Exhausted" };
+}
+const project = {
+  _id: "workspace_fixture",
+  name: "AI Explained",
+  _creationTime: 1789120000000,
+};
+let topics = [topic];
+export function useQuery(reference, args) {
   useSyncExternalStore(
     subscribe,
     () => state,
     () => state,
   );
   if (mode === "loading") return undefined;
+  if (args === "skip") return undefined;
   const name = getFunctionName(reference);
+  if (name === "relay:read") {
+    if (args.command.kind === "projects")
+      return { kind: "projects", projects: [project] };
+    if (args.command.kind === "project")
+      return { kind: "project", project, topics, topicStates: [] };
+    return {
+      kind: "topic",
+      topic: topics.find((t) => t._id === args.command.topicId) ?? topic,
+      research: [],
+      scripts: [],
+      draft: null,
+    };
+  }
+  if (name === "research:read")
+    return { kind: "topic_runs", runs: [], setup: { kind: "ready" } };
   if (name === "discovery:topicContext")
     return { updates: state.updates, monitors: state.monitors };
   return state;
@@ -114,7 +145,67 @@ export function useMutation() {
           createdTopicId: topic._id,
         })),
       };
+    if (command.kind === "save_brief")
+      topics = topics.map((t) =>
+        t._id === command.topicId ? { ...t, ...command } : t,
+      );
+    if (command.kind === "save_schedule")
+      topics = topics.map((t) =>
+        t._id === command.topicId
+          ? {
+              ...t,
+              frequency: command.frequency,
+              nextResearchAt:
+                command.frequency.kind === "scheduled"
+                  ? command.frequency.at
+                  : undefined,
+            }
+          : t,
+      );
+    if (command.kind === "create_topic")
+      topics = [
+        ...topics,
+        { ...topic, ...command, _id: `topic_${topics.length}` },
+      ];
+    if (command.kind === "save_monitor") {
+      const monitor = {
+        ...command,
+        _id: command.monitorId ?? `monitor_${state.monitors.length}`,
+        removed: false,
+        sync: "ready",
+      };
+      state = {
+        ...state,
+        monitors: command.monitorId
+          ? state.monitors.map((m) =>
+              m._id === command.monitorId ? monitor : m,
+            )
+          : [...state.monitors, monitor],
+      };
+    }
+    if (command.kind === "monitor_action")
+      state = {
+        ...state,
+        monitors: state.monitors.map((m) =>
+          m._id === command.monitorId
+            ? {
+                ...m,
+                paused:
+                  command.action === "pause"
+                    ? true
+                    : command.action === "resume"
+                      ? false
+                      : m.paused,
+                removed: command.action === "remove",
+              }
+            : m,
+        ),
+      };
+    state = { ...state };
     for (const notify of listeners) notify();
+    if (command.kind === "create_topic")
+      return { id: topics[topics.length - 1]._id };
+    if (command.kind === "create_project") return { id: project._id };
     return topic._id;
   };
 }

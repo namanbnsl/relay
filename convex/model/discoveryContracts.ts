@@ -7,10 +7,16 @@ export const discoveryConfig = v.object({
   language: v.string(),
   scope: v.union(v.literal("websites"), v.literal("web")),
   cadence: v.union(v.literal("manual"), v.literal("daily")),
+  schedule: v.optional(v.object({ time: v.string(), timezone: v.string() })),
   candidates: v.union(v.literal("suggest"), v.literal("automatic")),
 });
 export const frequency = v.union(
   v.object({ kind: v.literal("once") }),
+  v.object({
+    kind: v.literal("scheduled"),
+    at: v.number(),
+    timezone: v.string(),
+  }),
   v.object({
     kind: v.literal("daily"),
     time: v.string(),
@@ -18,15 +24,20 @@ export const frequency = v.union(
     paused: v.boolean(),
   }),
 );
-export const defaultDiscovery = {
+export const defaultDiscovery: typeof discoveryConfig.type = {
   brief: "",
   region: "",
   language: "",
   scope: "web",
   cadence: "manual",
   candidates: "suggest",
-} satisfies typeof discoveryConfig.type;
+};
 export const discoveryCommand = v.union(
+  v.object({
+    kind: v.literal("save_schedule"),
+    topicId: v.string(),
+    frequency,
+  }),
   v.object({
     kind: v.literal("configure_discovery"),
     projectId: v.string(),
@@ -97,7 +108,26 @@ export const discoveryCommand = v.union(
   }),
 );
 const id = z.string().min(1).max(128);
+const frequencyInput = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("once") }),
+  z.object({
+    kind: z.literal("scheduled"),
+    at: z.number().int().positive(),
+    timezone: z.string().min(1).max(100),
+  }),
+  z.object({
+    kind: z.literal("daily"),
+    time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    timezone: z.string().min(1).max(100),
+    paused: z.boolean(),
+  }),
+]);
 export const discoveryInput = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("save_schedule"),
+    topicId: id,
+    frequency: frequencyInput,
+  }),
   z.object({
     kind: z.literal("configure_discovery"),
     projectId: id,
@@ -107,6 +137,12 @@ export const discoveryInput = z.discriminatedUnion("kind", [
       language: z.string().max(100),
       scope: z.enum(["websites", "web"]),
       cadence: z.enum(["manual", "daily"]),
+      schedule: z
+        .object({
+          time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+          timezone: z.string().min(1).max(100),
+        })
+        .optional(),
       candidates: z.enum(["suggest", "automatic"]),
     }),
   }),
@@ -118,15 +154,7 @@ export const discoveryInput = z.discriminatedUnion("kind", [
     angle: z.string().max(8000),
     coverage: z.string().max(12000),
     status: z.enum(["active", "completed", "archived"]),
-    frequency: z.discriminatedUnion("kind", [
-      z.object({ kind: z.literal("once") }),
-      z.object({
-        kind: z.literal("daily"),
-        time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-        timezone: z.string().min(1).max(100),
-        paused: z.boolean(),
-      }),
-    ]),
+    frequency: frequencyInput,
   }),
   z.object({
     kind: z.literal("save_monitor"),

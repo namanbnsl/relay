@@ -1,3 +1,26 @@
+import type { Doc } from "../_generated/dataModel";
+
+export function sameFrequency(
+  a: NonNullable<Doc<"topics">["frequency"]>,
+  b: NonNullable<Doc<"topics">["frequency"]>,
+) {
+  switch (a.kind) {
+    case "once":
+      return b.kind === "once";
+    case "scheduled":
+      return (
+        b.kind === "scheduled" && a.at === b.at && a.timezone === b.timezone
+      );
+    case "daily":
+      return (
+        b.kind === "daily" &&
+        a.time === b.time &&
+        a.timezone === b.timezone &&
+        a.paused === b.paused
+      );
+  }
+}
+
 /** First future local start, once per local date. DST gaps start at the first
  * available minute after the configured time; repeated hours run only once. */
 export function nextStart(after: number, time: string, timezone: string) {

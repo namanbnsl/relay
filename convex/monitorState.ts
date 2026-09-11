@@ -3,6 +3,7 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { workflow } from "./researchWorkflow";
 import { monitoringSetup } from "./discovery";
+import { nextStart } from "./model/schedule";
 export const get = internalQuery({
   args: { monitorId: v.id("monitors") },
   handler: async (ctx, { monitorId }) => {
@@ -94,10 +95,26 @@ export const finish = internalMutation({
   handler: async (ctx, { monitorId, generation, ...state }) => {
     const m = await ctx.db.get(monitorId);
     if (!m) return;
+    const project = await ctx.db.get(m.projectId);
+    const schedule =
+      project?.discovery?.cadence === "daily"
+        ? project.discovery.schedule
+        : undefined;
+    const nextCheck =
+      schedule &&
+      !m.paused &&
+      !m.removed &&
+      !state.error &&
+      m.generation === generation
+        ? (m.nextCheck ??
+          nextStart(Date.now(), schedule.time, schedule.timezone))
+        : schedule
+          ? undefined
+          : state.nextCheck;
     await ctx.db.patch(monitorId, {
       ...state,
       error: state.error,
-      nextCheck: state.nextCheck,
+      nextCheck,
       leaseUntil: undefined,
       nextReconcileAt:
         m.removed && !state.error ? undefined : Date.now() + 3600000,
@@ -107,10 +124,74 @@ export const finish = internalMutation({
           ? "ready"
           : "pending",
     });
+    if (schedule && nextCheck !== undefined) {
+      await ctx.scheduler.runAt(
+        nextCheck,
+        internal.monitorState.scheduledCheck,
+        { monitorId, generation, due: nextCheck },
+      );
+    }
     if (m.generation !== generation)
       await ctx.scheduler.runAfter(0, internal.monitorState.enqueue, {
         monitorId,
       });
+  },
+});
+
+// Relay owns wall-clock schedules; Exa's interval schedule is disabled for these sources.
+export const scheduledCheck = internalMutation({
+  args: {
+    monitorId: v.id("monitors"),
+    generation: v.number(),
+    due: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const m = await ctx.db.get(args.monitorId);
+    if (
+      !m ||
+      m.removed ||
+      m.paused ||
+      m.generation !== args.generation ||
+      m.nextCheck !== args.due ||
+      args.due > Date.now()
+    )
+      return;
+    const p = await ctx.db.get(m.projectId);
+    const schedule =
+      p?.discovery?.cadence === "daily" ? p.discovery.schedule : undefined;
+    if (!schedule) return;
+    // A settings sync can briefly overlap the chosen time. Wait for it to finish.
+    if (m.sync === "syncing" || m.sync === "pending") {
+      await ctx.scheduler.runAfter(
+        60000,
+        internal.monitorState.scheduledCheck,
+        args,
+      );
+      return;
+    }
+    const nextCheck = nextStart(Date.now(), schedule.time, schedule.timezone);
+    await ctx.db.patch(m._id, { nextCheck });
+    await ctx.scheduler.runAt(nextCheck, internal.monitorState.scheduledCheck, {
+      ...args,
+      due: nextCheck,
+    });
+    if (!m.remoteId || m.sync !== "ready" || !monitoringSetup().available)
+      return;
+    const requestKey = `scheduled:${args.generation}:${args.due}`;
+    const receipt = await ctx.db
+      .query("monitorChecks")
+      .withIndex("by_request", (q) =>
+        q.eq("monitorId", m._id).eq("requestKey", requestKey),
+      )
+      .unique();
+    if (receipt) return;
+    const checkId = await ctx.db.insert("monitorChecks", {
+      monitorId: m._id,
+      requestKey,
+      generation: m.generation,
+      claimed: false,
+    });
+    await ctx.scheduler.runAfter(0, internal.monitorActions.check, { checkId });
   },
 });
 

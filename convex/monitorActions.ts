@@ -131,7 +131,7 @@ export const sync = internalAction({
           name: m.name,
           status: m.paused ? "paused" : "active",
           trigger:
-            config.cadence === "daily"
+            config.cadence === "daily" && !config.schedule
               ? { type: "interval", period: "1d" }
               : null,
           search: {

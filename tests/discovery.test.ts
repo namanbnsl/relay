@@ -868,3 +868,154 @@ it("closes investigated no-change cycles without moving approval, and keeps scri
     }),
   ).rejects.toThrow("not found");
 });
+
+describe("chosen discovery and research times", () => {
+  it("removes the creation-time interval, persists the chosen local time and dispatches only once when due", async () => {
+    const { t, owner, projectId, monitorId } = await setup();
+    vi.stubEnv("MONITORING_ENABLED", "true");
+    vi.stubEnv("EXA_API_KEY", "fixture-key");
+    vi.stubEnv("CONVEX_SITE_URL", "https://fixture.convex.site");
+    await owner.mutation(api.discovery.write, {
+      command: {
+        kind: "configure_discovery",
+        projectId,
+        config: {
+          ...defaultDiscovery,
+          cadence: "daily",
+          schedule: { time: "18:00", timezone: "Asia/Kolkata" },
+        },
+      },
+    });
+    const requests: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        requests.push(init.body ? JSON.parse(String(init.body)) : null);
+        return new Response(
+          JSON.stringify({
+            id: "mon_fixture",
+            status: "active",
+            nextRunAt: null,
+          }),
+        );
+      }),
+    );
+    await t.action(internal.monitorActions.sync, { monitorId });
+    expect(requests).toContainEqual(expect.objectContaining({ trigger: null }));
+    const m = await t.run((ctx) => ctx.db.get(monitorId));
+    expect(m?.nextCheck).toBe(Date.parse("2026-09-11T12:30:00Z"));
+    if (!m?.nextCheck) throw new Error("Expected scheduled check");
+    const args = { monitorId, generation: m.generation, due: m.nextCheck };
+    await t.mutation(internal.monitorState.scheduledCheck, args);
+    expect(
+      await t.run((ctx) => ctx.db.query("monitorChecks").collect()),
+    ).toHaveLength(0);
+    vi.setSystemTime(m.nextCheck);
+    await t.mutation(internal.monitorState.scheduledCheck, args);
+    await t.mutation(internal.monitorState.scheduledCheck, args);
+    expect(
+      await t.run((ctx) => ctx.db.query("monitorChecks").collect()),
+    ).toHaveLength(1);
+    expect((await t.run((ctx) => ctx.db.get(monitorId)))?.nextCheck).toBe(
+      Date.parse("2026-09-12T12:30:00Z"),
+    );
+    await owner.mutation(api.discovery.write, {
+      command: { kind: "monitor_action", monitorId, action: "pause" },
+    });
+    vi.setSystemTime(Date.parse("2026-09-12T12:30:00Z"));
+    await t.mutation(internal.monitorState.scheduledCheck, {
+      ...args,
+      due: Date.now(),
+    });
+    expect(
+      await t.run((ctx) => ctx.db.query("monitorChecks").collect()),
+    ).toHaveLength(1);
+  });
+  it("rejects invalid discovery timezones without replacing the saved settings", async () => {
+    const { owner, projectId } = await setup();
+    await expect(
+      owner.mutation(api.discovery.write, {
+        command: {
+          kind: "configure_discovery",
+          projectId,
+          config: {
+            ...defaultDiscovery,
+            cadence: "daily",
+            schedule: { time: "09:00", timezone: "invalid" },
+          },
+        },
+      }),
+    ).rejects.toThrow("valid time and timezone");
+    expect(
+      (await owner.query(api.discovery.read, { projectId })).config,
+    ).toEqual(defaultDiscovery);
+  });
+  it("schedules a one-time research job, rejects past times, and never re-arms it on brief edits", async () => {
+    const { t, owner, other, topicId, projectId } = await setup();
+    const frequency = {
+      kind: "scheduled",
+      at: Date.now() + 60000,
+      timezone: "Asia/Kolkata",
+    } satisfies NonNullable<
+      import("../convex/_generated/dataModel").Doc<"topics">["frequency"]
+    >;
+    const command = {
+      kind: "save_schedule",
+      topicId,
+      frequency,
+    } satisfies import("convex/server").FunctionArgs<
+      typeof api.discovery.write
+    >["command"];
+    await expect(
+      other.mutation(api.discovery.write, { command }),
+    ).rejects.toThrow("not found");
+    await expect(
+      owner.mutation(api.discovery.write, {
+        command: {
+          ...command,
+          frequency: { ...frequency, at: Date.now() - 1 },
+        },
+      }),
+    ).rejects.toThrow("future date");
+    await owner.mutation(api.discovery.write, { command });
+    const state = await owner.query(api.relay.read, {
+      command: { kind: "topic", topicId },
+    });
+    if (state.kind !== "topic") throw new Error("Expected topic");
+    const args = {
+      topicId: state.topic._id,
+      generation: state.topic.scheduleGeneration ?? 0,
+      due: frequency.at,
+    };
+    expect(state.topic.nextResearchAt).toBe(frequency.at);
+    const jobs = await t.run((ctx) =>
+      ctx.db.system.query("_scheduled_functions").collect(),
+    );
+    expect(jobs.some((job) => job.scheduledTime === frequency.at)).toBe(true);
+    await t.mutation(internal.schedules.cycle, args);
+    expect(
+      (await owner.query(api.discovery.read, { projectId })).investigations,
+    ).toHaveLength(0);
+    vi.setSystemTime(frequency.at);
+    await t.mutation(internal.schedules.cycle, args);
+    await t.mutation(internal.schedules.cycle, args);
+    expect(
+      (await owner.query(api.discovery.read, { projectId })).investigations,
+    ).toHaveLength(1);
+    await owner.mutation(api.discovery.write, {
+      command: {
+        kind: "save_brief",
+        topicId,
+        title: "Edited",
+        question: "Why?",
+        angle: "",
+        coverage: "",
+        status: "active",
+        frequency,
+      },
+    });
+    expect(
+      (await t.run((ctx) => ctx.db.get(state.topic._id)))?.nextResearchAt,
+    ).toBeUndefined();
+  });
+});

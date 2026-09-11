@@ -1,7 +1,6 @@
 "use client";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { ConvexError } from "convex/values";
 import { api } from "@/convex/_generated/api";
 import { ArrowUpRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,7 +9,7 @@ import type { Doc } from "@/convex/_generated/dataModel";
 const runLabels = {
   queued: "Waiting to start",
   running: "Research in progress",
-  succeeded: "Background sources ready",
+  succeeded: "Sources ready",
   partial: "Partial results available",
   failed: "Research needs attention",
   cancelled: "Research cancelled",
@@ -21,7 +20,6 @@ export function ResearchExecution({ topicId }: { topicId: string }) {
     command: { kind: "topic_runs", topicId },
   });
   const write = useMutation(api.research.write);
-  const requestKey = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
@@ -37,31 +35,21 @@ export function ResearchExecution({ topicId }: { topicId: string }) {
   const running = data.runs.some(
     (run) => run.state.kind === "queued" || run.state.kind === "running",
   );
-  async function act(kind: "start_research" | "cancel_run" | "retry_run") {
+  async function act(kind: "cancel_run" | "retry_run") {
     if (busy) return;
     setBusy(true);
     setError("");
     try {
-      if (kind === "start_research") {
-        requestKey.current ??= crypto.randomUUID();
-        const run = await write({
-          command: { kind, topicId, requestKey: requestKey.current },
-        });
-        setSelected(run._id);
-        requestKey.current = null;
-      } else if (current) {
+      if (current) {
         await write({ command: { kind, runId: current._id } });
       }
-    } catch (e) {
-      setError(
-        e instanceof ConvexError && typeof e.data === "string"
-          ? e.data
-          : "Could not complete the request. Try again; Relay will reuse this request safely.",
-      );
+    } catch {
+      setError("Could not complete the request. Please try again.");
     } finally {
       setBusy(false);
     }
   }
+  if (!current) return null;
   return (
     <section className="my-4 text-sm" aria-label="Research activity">
       {running ? (
@@ -90,9 +78,8 @@ export function ResearchExecution({ topicId }: { topicId: string }) {
           {current ? (
             <div className="space-y-3">
               <p>{runLabels[current.state.kind]}</p>
-              {"reason" in current.state ? <p>{current.state.reason}</p> : null}
               {current.cancellation !== "not_requested" ? (
-                <p>Cancellation: {current.cancellation.replaceAll("_", " ")}</p>
+                <p>Cancellation requested</p>
               ) : null}
               <div className="flex flex-wrap gap-2">
                 {current.occupied ? (
@@ -118,7 +105,7 @@ export function ResearchExecution({ topicId }: { topicId: string }) {
                     }
                     onClick={() => void act("retry_run")}
                   >
-                    Retry retrieval
+                    Try again
                   </Button>
                 ) : null}
                 <Button
@@ -134,7 +121,6 @@ export function ResearchExecution({ topicId }: { topicId: string }) {
               </div>
               <p className="leading-6">
                 Background results still need your agent’s assessment.
-                Cancellation may not stop provider charges.
               </p>
             </div>
           ) : null}
@@ -175,23 +161,11 @@ function Packet({ runId }: { runId: string }) {
   if (!data || data.kind !== "packet")
     return (
       <p role="status" className="mt-4 text-sm">
-        Loading research packet…
+        Loading sources…
       </p>
     );
   return (
     <div className="mt-5 space-y-4 border-t border-border pt-5">
-      <details className="text-xs text-muted-foreground">
-        <summary className="min-h-8 cursor-pointer">
-          Run and usage details
-        </summary>
-        <p className="break-all leading-6">
-          Run {data.run._id} · Exa {data.run.effort} ·{" "}
-          {data.run.stage.replaceAll("_", " ")} ·{" "}
-          {data.run.actualDollars === undefined
-            ? "Reported cost unavailable"
-            : `$${data.run.actualDollars.toFixed(3)} reported cost`}
-        </p>
-      </details>
       <p className="whitespace-pre-wrap text-sm">{data.run.question}</p>
       {data.run.plan ? (
         <details>
@@ -207,7 +181,7 @@ function Packet({ runId }: { runId: string }) {
       {data.packet ? (
         <>
           <h3 className="text-sm font-medium">
-            Provider findings · not reviewed
+            Collected findings · ready for your agent
           </h3>
           <p className="whitespace-pre-wrap break-words text-sm leading-7">
             {data.packet.findings}
@@ -221,22 +195,6 @@ function Packet({ runId }: { runId: string }) {
                 ))}
               </ul>
             </div>
-          ) : null}
-          <details>
-            <summary className="text-sm">Provider grounding</summary>
-            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all text-xs">
-              {data.packet.groundingJson}
-            </pre>
-          </details>
-          {data.outputUrl ? (
-            <a
-              href={data.outputUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block text-xs underline"
-            >
-              Full provider output (untrusted JSON)
-            </a>
           ) : null}
           <h4 className="text-sm font-medium">
             Sources ·{" "}
@@ -270,7 +228,7 @@ function Packet({ runId }: { runId: string }) {
         </>
       ) : (
         <p className="text-sm text-muted-foreground">
-          A packet will appear when usable provider findings are available.
+          Findings will appear here when the search finishes.
         </p>
       )}
     </div>
@@ -295,23 +253,17 @@ function Evidence({ row }: { row: Doc<"researchEvidence"> }) {
       <p className="mt-1 text-xs text-muted-foreground">
         {row.outcome.kind}
         {row.publishedAt
-          ? ` · Publication time reported by Exa: ${row.publishedAt}`
+          ? ` · Published: ${row.publishedAt}`
           : " · Publication time unknown"}
       </p>
       {row.outcome.kind === "failed" ? (
-        <p className="mt-1 text-xs">{row.outcome.reason}</p>
+        <p className="mt-1 text-xs">This source couldn’t be retrieved.</p>
       ) : null}
       {row.outcome.kind === "retrieved" ? (
         <>
           <p className="mt-1 break-all text-xs text-muted-foreground">
             Retrieved {new Date(row.outcome.retrievedAt).toLocaleString()}
           </p>
-          <details className="mt-2 text-xs text-muted-foreground">
-            <summary className="min-h-8 cursor-pointer">
-              Source integrity details
-            </summary>
-            <p className="break-all leading-6">SHA-256 {row.outcome.hash}</p>
-          </details>
           <Button
             variant="outline"
             size="sm"

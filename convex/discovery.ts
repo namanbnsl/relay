@@ -17,7 +17,7 @@ import {
   defaultDiscovery,
   candidate,
 } from "./model/discoveryContracts";
-import { nextStart } from "./model/schedule";
+import { nextStart, sameFrequency } from "./model/schedule";
 import { latestDraft } from "./model/drafts";
 
 export function monitoringSetup() {
@@ -202,6 +202,50 @@ async function queueSync(ctx: MutationCtx, id: Id<"monitors">) {
     monitorId: id,
   });
 }
+async function saveSchedule(
+  ctx: MutationCtx,
+  topic: Doc<"topics">,
+  frequency: NonNullable<Doc<"topics">["frequency"]>,
+  status: NonNullable<Doc<"topics">["status"]>,
+) {
+  const f =
+    frequency.kind === "daily" && status !== "active"
+      ? { ...frequency, paused: true }
+      : frequency;
+  const changed =
+    !sameFrequency(topic.frequency ?? { kind: "once" }, f) ||
+    (topic.status ?? "active") !== status;
+  // Editing a brief must not postpone or re-arm an existing schedule.
+  if (!changed) return;
+  let due: number | undefined;
+  try {
+    if (f.kind === "daily") {
+      const next = nextStart(Date.now(), f.time, f.timezone);
+      if (!f.paused && status === "active") due = next;
+    } else if (f.kind === "scheduled" && status === "active") {
+      new Intl.DateTimeFormat("en", { timeZone: f.timezone }).format(f.at);
+      if (f.at <= Date.now()) throw new Error("past");
+      due = f.at;
+    }
+  } catch {
+    throw new ConvexError(
+      "Choose a future date and time with a valid timezone.",
+    );
+  }
+  const generation = (topic.scheduleGeneration ?? 0) + 1;
+  await ctx.db.patch(topic._id, {
+    frequency: f,
+    scheduleGeneration: generation,
+    nextResearchAt: due,
+  });
+  if (due !== undefined) {
+    await ctx.scheduler.runAt(due, internal.schedules.cycle, {
+      topicId: topic._id,
+      generation,
+      due,
+    });
+  }
+}
 export async function writeOwned(
   ctx: MutationCtx,
   subject: string,
@@ -212,8 +256,30 @@ export async function writeOwned(
     throw new ConvexError("Invalid workspace settings or command.");
   const c = parsed.data;
   switch (c.kind) {
+    case "save_schedule": {
+      const t = await topicFor(ctx, subject, c.topicId);
+      if ((t.status ?? "active") !== "active" && c.frequency.kind !== "once")
+        throw new ConvexError(
+          "Set this topic to Active before scheduling research.",
+        );
+      await saveSchedule(ctx, t, c.frequency, t.status ?? "active");
+      return t._id;
+    }
     case "configure_discovery": {
       const p = await projectFor(ctx, subject, c.projectId);
+      if (c.config.schedule) {
+        try {
+          nextStart(
+            Date.now(),
+            c.config.schedule.time,
+            c.config.schedule.timezone,
+          );
+        } catch {
+          throw new ConvexError(
+            "Choose a valid time and timezone for discovery.",
+          );
+        }
+      }
       await ctx.db.patch(p._id, { discovery: c.config });
       const monitors = await ctx.db
         .query("monitors")
@@ -223,6 +289,7 @@ export async function writeOwned(
         await ctx.db.patch(m._id, {
           generation: m.generation + 1,
           sync: "pending",
+          nextCheck: undefined,
         });
         await queueSync(ctx, m._id);
       }
@@ -230,37 +297,13 @@ export async function writeOwned(
     }
     case "save_brief": {
       const t = await topicFor(ctx, subject, c.topicId);
-      const f =
-        c.frequency.kind === "daily" && c.status !== "active"
-          ? { ...c.frequency, paused: true }
-          : c.frequency;
-      let nextResearchAt: number | undefined;
-      if (f.kind === "daily") {
-        try {
-          const next = nextStart(Date.now(), f.time, f.timezone);
-          if (!f.paused) nextResearchAt = next;
-        } catch {
-          throw new ConvexError(
-            "Use a valid IANA timezone and local start time.",
-          );
-        }
-      }
-      const changed =
-        JSON.stringify(t.frequency ?? { kind: "once" }) !== JSON.stringify(f) ||
-        (t.status ?? "active") !== c.status;
+      await saveSchedule(ctx, t, c.frequency, c.status);
       await ctx.db.patch(t._id, {
         title: c.title,
         question: c.question,
         angle: c.angle,
         coverage: c.coverage,
         status: c.status,
-        frequency: f,
-        ...(changed
-          ? {
-              scheduleGeneration: (t.scheduleGeneration ?? 0) + 1,
-              nextResearchAt,
-            }
-          : {}),
       });
       return t._id;
     }
@@ -339,7 +382,9 @@ export async function writeOwned(
       const m = await monitorFor(ctx, subject, c.monitorId);
       if (c.action === "check") {
         if (m.removed || m.sync !== "ready" || !monitoringSetup().available)
-          throw new ConvexError("Monitor is not ready. Reconcile it first.");
+          throw new ConvexError(
+            "This source is still connecting. Please try again shortly.",
+          );
         if (!c.requestKey)
           throw new ConvexError(
             "Manual checks require a retry-safe request key.",

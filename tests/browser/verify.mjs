@@ -1,134 +1,169 @@
-// Run against the isolated Vite fixture, never against a live account.
-import { mkdir } from "node:fs/promises";
-import assert from "node:assert/strict";
+// Uses the real UI with local fixtures; never connects to a live account.
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE ?? "playwright-core"
 );
+import assert from "node:assert/strict";
+import { mkdir } from "node:fs/promises";
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH ?? "/usr/bin/google-chrome",
   headless: true,
   args: ["--no-sandbox"],
 });
 const page = await browser.newPage();
-const failures = [];
-page.on("pageerror", (error) => failures.push(error.message));
-const origin = "http://127.0.0.1:4173";
-const output = "/tmp/relay-browser-verification";
-await mkdir(output, { recursive: true });
+const errors = [];
+page.on("pageerror", (e) => errors.push(e.message));
+const base = "http://127.0.0.1:4173/projects/workspace_fixture";
+await mkdir("/tmp/relay-ux", { recursive: true });
+async function fits() {
+  assert(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+    "Horizontal overflow",
+  );
+}
 try {
-  for (const viewport of [
-    { width: 1280, height: 800 },
-    { width: 390, height: 844 },
-  ]) {
-    await page.setViewportSize(viewport);
-    await page.goto(origin);
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 850 });
+    await page.goto(base + "?view=discover");
     await page
-      .getByRole("heading", { name: "Discover", exact: true })
+      .getByRole("heading", { name: "Discover your next story." })
       .waitFor();
+    await fits();
+    await page.screenshot({
+      path: `/tmp/relay-ux/discover-${width}.png`,
+      fullPage: true,
+    });
     assert(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
+      !/\b(Exa|Reconcile|provider)\b/i.test(
+        await page.locator("main").innerText(),
       ),
     );
+    await page.getByRole("button", { name: "Schedule", exact: true }).click();
+    await page.getByLabel("Check for updates").selectOption("daily");
+    await page.getByLabel("Start time").fill("18:30");
+    await page.getByLabel("Timezone").selectOption("Asia/Kolkata");
+    await fits();
     await page.screenshot({
-      path: `${output}/discover-${viewport.width}.png`,
+      path: `/tmp/relay-ux/schedule-${width}.png`,
       fullPage: true,
     });
     await page
-      .getByRole("button", { name: "Create topic", exact: true })
+      .getByRole("button", { name: "Save schedule", exact: true })
       .click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+    await page.getByText("Every day at 18:30 · Asia/Kolkata").waitFor();
+    await page.getByRole("button", { name: "Schedule", exact: true }).click();
+    assert.equal(await page.getByLabel("Start time").inputValue(), "18:30");
+    await page.keyboard.press("Escape");
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+    await page.waitForFunction(
+      () => document.activeElement.textContent.trim() === "Schedule",
+    );
+    await page.getByRole("button", { name: /Following/ }).click();
+    await page.getByRole("button", { name: "Follow a source" }).click();
+    await page.getByLabel("Name", { exact: true }).fill("AI research papers");
+    await page
+      .getByLabel("What should Relay look for?")
+      .fill("Practical results from new AI research");
+    await page.getByLabel("Websites (optional)").fill("example.org");
+    await page
+      .getByRole("button", { name: "Follow source", exact: true })
+      .click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+    await page.getByRole("heading", { name: "AI research papers" }).waitFor();
+    await fits();
+    await page.screenshot({
+      path: `/tmp/relay-ux/following-${width}.png`,
+      fullPage: true,
+    });
+    const source = page
+      .locator("article")
+      .filter({
+        has: page.getByRole("heading", { name: "AI research papers" }),
+      });
+    await source.getByRole("button", { name: "Pause", exact: true }).click();
+    await source.getByText("Paused", { exact: true }).waitFor();
+    await source.getByRole("button", { name: "Resume" }).click();
+    await source.getByRole("button", { name: "Pause", exact: true }).waitFor();
+    await page.getByRole("button", { name: /For you/ }).click();
+    await page.getByRole("button", { name: "Make this a topic" }).click();
+    await page.getByRole("heading", { name: "The direction" }).waitFor();
+    await fits();
+    await page.screenshot({
+      path: `/tmp/relay-ux/topic-${width}.png`,
+      fullPage: true,
+    });
+    await page.getByRole("button", { name: "Edit brief" }).click();
     await page
       .getByLabel("Title", { exact: true })
-      .fill("An edited potential video");
+      .fill("A clearer video idea");
+    await page.getByRole("button", { name: "Save brief", exact: true }).click();
+    await page.getByRole("heading", { name: "A clearer video idea" }).waitFor();
+    await page.getByRole("button", { name: "Research paused" }).click();
+    await page.getByLabel("When", { exact: true }).selectOption("scheduled");
     await page
-      .locator("article form")
+      .getByRole("button", { name: "Save schedule", exact: true })
+      .click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+    await page.getByText(/Next starts/).waitFor();
+    await page.getByRole("button", { name: "Research with my agent" }).click();
+    await page
+      .getByRole("heading", { name: "Continue with your agent" })
+      .waitFor();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "All topics" }).click();
+    await page.getByRole("button", { name: "New topic", exact: true }).click();
+    await page
+      .getByLabel("Title", { exact: true })
+      .fill("How does caching work?");
+    await page
+      .getByLabel("Research question")
+      .fill("What makes cached responses fast?");
+    await page
       .getByRole("button", { name: "Create topic", exact: true })
       .click();
-    await page.getByRole("link", { name: "Open topic →" }).waitFor();
-    await page.goto(origin);
     await page
-      .getByRole("button", { name: "Attach to topic", exact: true })
+      .getByRole("heading", { name: "How does caching work?" })
+      .waitFor();
+    await page.getByRole("button", { name: /3.*script/i }).click();
+    await page.getByRole("heading", { name: "Research comes first" }).waitFor();
+    await page.getByRole("button", { name: "View research" }).click();
+    await page
+      .getByRole("heading", { name: "Ready for a little discovery" })
+      .waitFor();
+    await page.goto(base + "?view=discover&state=error");
+    await page.getByRole("button", { name: "Schedule", exact: true }).click();
+    await page.getByLabel("Check for updates").selectOption("daily");
+    await page.getByLabel("Start time").fill("21:45");
+    await page
+      .getByRole("button", { name: "Save schedule", exact: true })
       .click();
-    await page.getByLabel("Existing topic").selectOption("topic_fixture");
-    await page.getByRole("button", { name: "Attach context" }).click();
-    await page.getByText("Saved", { exact: true }).waitFor();
-    await page.getByRole("button", { name: /^sources$/i }).click();
-    await page.getByRole("heading", { name: "Open model releases" }).waitFor();
-    assert(await page.getByRole("button", { name: "Check now" }).isDisabled());
-    await page.locator("summary").filter({ hasText: "+ Add source" }).click();
-    await page
-      .getByRole("textbox", { name: "Source name", exact: true })
-      .fill("A monitored website");
-    assert(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-    );
-    await page.screenshot({
-      path: `${output}/sources-${viewport.width}.png`,
-      fullPage: true,
-    });
-    await page.goto(`${origin}/?view=brief`);
-    await page
-      .locator("summary")
-      .filter({ hasText: "Research settings" })
-      .click();
-    assert.equal(
-      await page.getByLabel("IANA timezone").inputValue(),
-      "Asia/Kolkata",
-    );
-    assert(await page.getByLabel("Pause daily research").isChecked());
-    await page.getByLabel("Research frequency").selectOption("once");
-    assert.equal(await page.getByLabel("IANA timezone").count(), 0);
-    await page.getByLabel("Research frequency").selectOption("daily");
-    await page.getByText("Waiting for agent", { exact: true }).waitFor();
-    assert(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-    );
-    await page.screenshot({
-      path: `${output}/brief-${viewport.width}.png`,
-      fullPage: true,
-    });
-    await page.goto(`${origin}/?state=error`);
-    await page
-      .locator("summary")
-      .filter({ hasText: "Workspace settings" })
-      .click();
-    await page
-      .getByLabel("Discovery brief")
-      .fill("Keep these edits after a failed save");
-    await page.getByRole("button", { name: "Save settings" }).click();
     await page.getByRole("alert").waitFor();
-    assert.equal(
-      await page.getByLabel("Discovery brief").inputValue(),
-      "Keep these edits after a failed save",
-    );
+    assert.equal(await page.getByLabel("Start time").inputValue(), "21:45");
+    await fits();
     await page.screenshot({
-      path: `${output}/error-${viewport.width}.png`,
+      path: `/tmp/relay-ux/save-error-${width}.png`,
       fullPage: true,
     });
-    await page.goto(`${origin}/?state=empty`);
-    await page.getByText("No updates yet", { exact: true }).waitFor();
-    await page.goto(`${origin}/?state=loading`);
-    await page.waitForTimeout(100);
-    assert.equal(
-      await page.getByRole("button", { name: "Create topic" }).count(),
-      0,
-    );
+    await page.goto(base + "?state=error");
+    await page.getByRole("button", { name: "New topic", exact: true }).click();
+    await page.getByLabel("Title", { exact: true }).fill("Keep my topic after failure");
+    await page.getByLabel("Research question").fill("Will my question survive a failed save?");
+    await page.getByRole("button", { name: "Create topic", exact: true }).click();
+    await page.getByRole("alert").waitFor();
+    assert.equal(await page.getByLabel("Title", { exact: true }).inputValue(), "Keep my topic after failure");
+    assert.equal(await page.getByLabel("Research question").inputValue(), "Will my question survive a failed save?");
+
   }
-  assert.deepEqual(failures, []);
+  assert.deepEqual(errors, []);
   console.log(
-    `Desktop/mobile fixture interactions passed. Screenshots: ${output}`,
+    "Passed: desktop/mobile scheduling, persisted UI values, focus return, sources, pause/resume, topic creation, brief editing, agent handoff, research/script navigation, save failure retention.",
   );
-} catch (error) {
-  console.error({
-    url: page.url(),
-    text: await page.locator("body").innerText(),
-  });
-  await page.screenshot({ path: `${output}/failure.png`, fullPage: true });
-  throw error;
+} catch (e) {
+  console.error({ url: page.url() });
+  await page.screenshot({ path: "/tmp/relay-ux/failure.png", fullPage: true });
+  throw e;
 } finally {
   await browser.close();
 }

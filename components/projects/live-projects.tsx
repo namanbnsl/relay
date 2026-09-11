@@ -16,7 +16,7 @@ import {
 import { ConvexError } from "convex/values";
 import type { FunctionArgs } from "convex/server";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -26,7 +26,6 @@ import {
   FileText,
   Folder,
   History,
-  Layers2,
   Loader2,
   MessageSquare,
   Pencil,
@@ -62,9 +61,12 @@ export { ProjectFrame } from "./project-frame";
 type Command = FunctionArgs<typeof api.relay.write>["command"];
 export function useRelayWrite() {
   const mutate = useMutation(api.relay.write);
+  const locked = useRef(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   async function write(command: Command) {
+    if (locked.current) return null;
+    locked.current = true;
     setPending(true);
     setError("");
     try {
@@ -92,6 +94,7 @@ export function useRelayWrite() {
       );
       return null;
     } finally {
+      locked.current = false;
       setPending(false);
     }
   }
@@ -124,6 +127,7 @@ export function ErrorMessage({ error }: { error: string }) {
   ) : null;
 }
 export function Projects() {
+  const router = useRouter();
   const { isAuthenticated } = useConvexAuth();
   const data = useQuery(
     api.relay.read,
@@ -173,7 +177,7 @@ export function Projects() {
     <ProjectFrame title="Workspaces">
       <WorkspaceHeading
         title="Workspaces"
-        description="Research and scripts, saved in one place."
+        description="A home for your ideas and the work you create with your agent."
         action={
           <Button
             onClick={(event) => {
@@ -196,13 +200,16 @@ export function Projects() {
       >
         <form
           className="grid gap-5"
-          action={async (values) => {
+          onSubmit={async (event) => {
+            event.preventDefault();
+            const values = new FormData(event.currentTarget);
             const result = await write({
               kind: "create_project",
               name: String(values.get("name") ?? ""),
             });
             if (result) {
               setAdding(false);
+              router.push(`/projects/${result.id}`);
             }
           }}
         >
@@ -336,7 +343,9 @@ export function Project({ projectId }: { projectId: string }) {
                   ? topic.frequency.paused
                     ? "Daily · Paused"
                     : "Daily"
-                  : "One-time"}{" "}
+                  : topic.nextResearchAt
+                    ? "Scheduled"
+                    : "On demand"}{" "}
                 ·{" "}
                 {topic.status && topic.status !== "active"
                   ? topic.status
@@ -355,7 +364,9 @@ export function Project({ projectId }: { projectId: string }) {
       }, []);
   return (
     <ProjectFrame title={data.project.name}>
-      <WorkspaceNavigation projectId={projectId} discover={discover} />
+      {!selected || discover ? (
+        <WorkspaceNavigation projectId={projectId} discover={discover} />
+      ) : null}
       {discover ? (
         <Discover projectId={projectId} topics={data.topics} />
       ) : selected ? (
@@ -369,7 +380,7 @@ export function Project({ projectId }: { projectId: string }) {
         <>
           <WorkspaceHeading
             title={data.project.name}
-            description="Every good script starts with a question."
+            description="Your ideas, research, and scripts. Pick up where you left off."
             action={
               <Button
                 onClick={(event) => {
@@ -392,7 +403,9 @@ export function Project({ projectId }: { projectId: string }) {
           >
             <form
               className="grid gap-5"
-              action={async (values) => {
+              onSubmit={async (event) => {
+                event.preventDefault();
+                const values = new FormData(event.currentTarget);
                 const result = await write({
                   kind: "create_topic",
                   requestKey: (topicRequest.current ??= crypto.randomUUID()),
@@ -498,12 +511,16 @@ function Topic({
   const data = useQuery(api.relay.read, {
     command: { kind: "topic", topicId },
   });
-  const [tab, setTab] = useState<"brief" | "research" | "script">("brief");
+  const [selectedTab, setTab] = useState<
+    "brief" | "research" | "script" | null
+  >(null);
   if (!data || data.kind !== "topic") return <DocumentLoading />;
   if (data.topic.projectId !== projectId)
     return <p>Topic not found in this workspace.</p>;
   const latest = data.research[0];
   const script = data.scripts[0];
+  const tab =
+    selectedTab ?? (script ? "script" : latest ? "research" : "brief");
   return (
     <>
       <button
@@ -529,11 +546,9 @@ function Topic({
                 data-document-navigation
                 className={`min-h-10 border-b-2 text-sm capitalize focus-visible:outline-2 ${tab === item ? "border-foreground" : "border-transparent text-muted-foreground"}`}
               >
-                {item === "research" ? (
-                  <FileText size={15} aria-hidden />
-                ) : (
-                  <Layers2 size={15} aria-hidden />
-                )}
+                <span className="workspace-step-number">
+                  {item === "brief" ? "1" : item === "research" ? "2" : "3"}
+                </span>
                 {item}
               </button>
             ),
@@ -542,7 +557,7 @@ function Topic({
         {tab !== "brief" ? <TopicHistory topicId={topicId} tab={tab} /> : null}
       </div>
       {tab === "brief" ? (
-        <TopicBrief topic={data.topic} />
+        <TopicBrief topic={data.topic} onResearch={() => setTab("research")} />
       ) : (
         <>
           <TopicDocument

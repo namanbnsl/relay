@@ -1,81 +1,43 @@
 "use client";
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery } from "convex/react";
-import { ConvexError } from "convex/values";
-import type { FunctionArgs } from "convex/server";
+import { useQuery } from "convex/react";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Clock3,
+  SlidersHorizontal,
+  ArrowRight,
+  Plus,
+  Radio,
+} from "lucide-react";
+import { Field, value, useCommand } from "./workspace-actions";
+import {
+  ResearchSchedule,
+  TimezoneField,
+  formatScheduleTime,
+} from "./research-schedule";
 import { workspaceSelectClass } from "./workspace-ui";
 import {
   AgentPrompt,
   DocumentLoading,
   EmptyDocument,
+  WorkspaceDialog,
 } from "./workspace-interactions";
 
-type Command = FunctionArgs<typeof api.discovery.write>["command"];
-function useCommand() {
-  const mutate = useMutation(api.discovery.write);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const locked = useRef(false);
-  async function run(command: Command) {
-    if (locked.current) return null;
-    locked.current = true;
-    setBusy(true);
-    setError("");
-    setMessage("");
-    try {
-      const id = await mutate({ command });
-      setMessage("Saved");
-      return id;
-    } catch (e) {
-      setError(
-        e instanceof ConvexError && typeof e.data === "string"
-          ? e.data
-          : "Could not save. Try again.",
-      );
-      return null;
-    } finally {
-      locked.current = false;
-      setBusy(false);
-    }
-  }
-  return {
-    run,
-    busy,
-    feedback: (
-      <>
-        <p role="status" className="text-xs text-muted-foreground">
-          {busy ? "Saving…" : message}
-        </p>
-        {error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        ) : null}
-      </>
-    ),
-  };
-}
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="grid gap-2 text-sm">
-      <span>{label}</span>
-      {children}
-    </label>
-  );
-}
-function value(data: FormData, key: string) {
-  return String(data.get(key) ?? "").trim();
-}
 function stamp(at?: number) {
-  return at === undefined ? "Not available" : new Date(at).toLocaleString();
+  return at === undefined
+    ? "Not checked yet"
+    : new Date(at).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
 }
 export function WorkspaceNavigation({
   projectId,
@@ -85,27 +47,24 @@ export function WorkspaceNavigation({
   discover: boolean;
 }) {
   return (
-    <nav
-      aria-label="Workspace destinations"
-      className="mb-8 flex gap-6 border-b border-border text-sm"
-    >
+    <nav aria-label="Workspace destinations" className="workspace-destinations">
       {[
-        {
-          title: "Discover",
-          href: `/projects/${projectId}?view=discover`,
-          selected: discover,
-        },
         {
           title: "Topics",
           href: `/projects/${projectId}`,
           selected: !discover,
+        },
+        {
+          title: "Discover",
+          href: `/projects/${projectId}?view=discover`,
+          selected: discover,
         },
       ].map((item) => (
         <Link
           key={item.title}
           href={item.href}
           aria-current={item.selected ? "page" : undefined}
-          className={`min-h-11 border-b-2 py-3 ${item.selected ? "border-foreground" : "border-transparent text-muted-foreground"}`}
+          className="workspace-destination"
         >
           {item.title}
         </Link>
@@ -125,37 +84,64 @@ export function Discover({
   const [showDismissed, setShowDismissed] = useState(false);
   if (!data) return <DocumentLoading />;
   const updates = data.updates.filter((u) => showDismissed || !u.dismissed);
+  const sources = data.monitors.filter((m) => !m.removed);
+  const next = sources
+    .filter((m) => !m.paused && m.nextCheck)
+    .map((m) => m.nextCheck ?? Infinity)
+    .sort((a, b) => a - b)[0];
   return (
-    <div className="space-y-7">
-      <div>
-        <h1 className="text-2xl font-medium tracking-tight">Discover</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Developments worth turning into your next video.
+    <div>
+      <div className="workspace-heading-row">
+        <div>
+          <p className="workspace-eyebrow">
+            A little inspiration, on your terms
+          </p>
+          <h1>Discover your next story.</h1>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            Follow what matters. Turn a promising update into a topic.
+          </p>
+        </div>
+        <DiscoverySettings projectId={projectId} config={data.config} />
+      </div>
+      <div className="workspace-schedule-line">
+        <Clock3 size={15} aria-hidden />
+        <p>
+          {data.config.cadence === "daily"
+            ? data.config.schedule
+              ? `Every day at ${data.config.schedule.time} · ${data.config.schedule.timezone.replaceAll("_", " ")}`
+              : "Daily discovery · choose a time in Schedule"
+            : "Discover when you ask, or set a daily schedule."}
+          {next ? (
+            <span className="block mt-1 text-xs text-muted-foreground">
+              Next check:{" "}
+              {formatScheduleTime(next, data.config.schedule?.timezone)}
+            </span>
+          ) : null}
         </p>
       </div>
-      <DiscoverySettings projectId={projectId} config={data.config} />
-      {!data.setup.available ? (
-        <p
-          role="status"
-          className="border-l-2 border-border pl-4 text-sm text-muted-foreground"
-        >
-          {data.setup.reason}
+      {data.config.cadence === "daily" && !data.setup.available ? (
+        <p role="status" className="mt-3 text-xs text-muted-foreground">
+          Your schedule is saved. Automatic discovery is currently unavailable.
         </p>
       ) : null}
-      <nav aria-label="Discover views" className="flex gap-5">
-        {(["updates", "sources"] satisfies Array<typeof view>).map((tab) => (
+      <div className="mt-9 flex flex-wrap items-center justify-between gap-3">
+        <nav aria-label="Discover views" className="workspace-view-switch">
           <button
-            key={tab}
-            onClick={() => setView(tab)}
-            aria-pressed={view === tab}
-            className={`min-h-10 border-b-2 text-sm capitalize ${view === tab ? "border-foreground" : "border-transparent text-muted-foreground"}`}
+            aria-pressed={view === "updates"}
+            onClick={() => setView("updates")}
           >
-            {tab}
+            For you <span>{updates.length}</span>
           </button>
-        ))}
-      </nav>
-      {view === "updates" ? (
-        <>
+          <button
+            aria-pressed={view === "sources"}
+            onClick={() => setView("sources")}
+          >
+            Following <span>{sources.length}</span>
+          </button>
+        </nav>
+        {view === "sources" ? (
+          <MonitorEditor projectId={projectId} />
+        ) : (
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
@@ -164,44 +150,55 @@ export function Discover({
             />
             Show dismissed
           </label>
-          <div className="divide-y divide-border">
-            {updates.length ? (
-              updates.map((update) => (
-                <UpdateCard key={update._id} update={update} topics={topics} />
-              ))
-            ) : (
-              <EmptyDocument
-                title="No updates yet"
-                description="Add sources, then run a check or enable daily discovery. Only actual monitoring results appear here."
-              >
-                <Button variant="outline" onClick={() => setView("sources")}>
-                  Manage sources
-                </Button>
-              </EmptyDocument>
-            )}
-          </div>
-        </>
+        )}
+      </div>
+      {view === "updates" ? (
+        <div className="workspace-feed">
+          {updates.length ? (
+            updates.map((update) => (
+              <UpdateCard key={update._id} update={update} topics={topics} />
+            ))
+          ) : (
+            <EmptyDocument
+              title={showDismissed ? "No updates yet" : "You’re all caught up"}
+              description={
+                sources.length
+                  ? "New discoveries will appear here after your next check."
+                  : "Tell Relay what to follow. Your next good idea can start here."
+              }
+            >
+              <Button variant="outline" onClick={() => setView("sources")}>
+                Choose what to follow <ArrowRight aria-hidden />
+              </Button>
+            </EmptyDocument>
+          )}
+        </div>
       ) : (
-        <>
-          <p className="max-w-xl text-sm leading-6 text-muted-foreground">
-            Monitor websites and search queries here. These are discovery
-            inputs; retrieved research evidence stays with its topic. Collection
-            is not an exhaustive crawl or a guarantee of detecting every page
-            edit.
+        <div className="mt-5">
+          <p className="mb-6 max-w-xl text-sm leading-6 text-muted-foreground">
+            The subjects and websites Relay watches for new developments.
           </p>
-          <MonitorEditor projectId={projectId} />
-          <div className="divide-y divide-border">
-            {data.monitors
-              .filter((m) => !m.removed || m.sync !== "ready")
-              .map((m) => (
-                <MonitorRow
-                  key={m._id}
-                  monitor={m}
-                  available={data.setup.available}
-                />
-              ))}
-          </div>
-        </>
+          {!data.setup.available ? (
+            <p role="status" className="mb-5 text-sm text-muted-foreground">
+              Automatic discovery is currently unavailable. Your sources are
+              saved.
+            </p>
+          ) : null}
+          {sources.length ? (
+            sources.map((m) => (
+              <MonitorRow
+                key={m._id}
+                monitor={m}
+                available={data.setup.available}
+              />
+            ))
+          ) : (
+            <EmptyDocument
+              title="What should Relay follow?"
+              description="Add a subject, a website, or ask your connected agent to set up your sources."
+            />
+          )}
+        </div>
       )}
     </div>
   );
@@ -213,98 +210,153 @@ function DiscoverySettings({
   projectId: string;
   config: NonNullable<Doc<"projects">["discovery"]>;
 }) {
-  const action = useCommand();
+  const [open, setOpen] = useState(false);
   return (
-    <details className="border-y border-border py-3">
-      <summary className="cursor-pointer text-sm">Workspace settings</summary>
-      <form
-        key={JSON.stringify(config)}
-        className="mt-5 grid max-w-2xl gap-4"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget);
-          await action.run({
-            kind: "configure_discovery",
-            projectId,
-            config: {
-              brief: value(data, "brief"),
-              region: value(data, "region"),
-              language: value(data, "language"),
-              scope: value(data, "scope") === "websites" ? "websites" : "web",
-              cadence: value(data, "cadence") === "daily" ? "daily" : "manual",
-              candidates:
-                value(data, "candidates") === "automatic"
-                  ? "automatic"
-                  : "suggest",
-            },
-          });
-        }}
-      >
-        <Field label="Discovery brief">
-          <Textarea
-            name="brief"
-            defaultValue={config.brief}
-            maxLength={12000}
-            placeholder="Interests, relevance criteria, and exclusions"
-          />
-        </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Region (optional)">
-            <Input name="region" defaultValue={config.region} maxLength={100} />
-          </Field>
-          <Field label="Language (optional)">
+    <WorkspaceDialog
+      open={open}
+      onOpenChange={setOpen}
+      title="Your discovery schedule"
+      description="Choose when Relay checks the sources you follow for fresh ideas."
+      trigger={
+        <Button variant="outline">
+          <Clock3 size={15} aria-hidden />
+          Schedule
+        </Button>
+      }
+    >
+      <DiscoverySettingsForm
+        projectId={projectId}
+        config={config}
+        onSaved={() => setOpen(false)}
+      />
+    </WorkspaceDialog>
+  );
+}
+function DiscoverySettingsForm({
+  projectId,
+  config,
+  onSaved,
+}: {
+  projectId: string;
+  config: NonNullable<Doc<"projects">["discovery"]>;
+  onSaved: () => void;
+}) {
+  const action = useCommand();
+  const [daily, setDaily] = useState(config.cadence === "daily");
+  return (
+    <form
+      className="grid gap-5"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        const id = await action.run({
+          kind: "configure_discovery",
+          projectId,
+          config: {
+            brief: value(data, "brief"),
+            region: value(data, "region"),
+            language: value(data, "language"),
+            scope: value(data, "scope") === "websites" ? "websites" : "web",
+            cadence: daily ? "daily" : "manual",
+            ...(daily
+              ? {
+                  schedule: {
+                    time: value(data, "time"),
+                    timezone: value(data, "timezone"),
+                  },
+                }
+              : {}),
+            candidates:
+              value(data, "candidates") === "automatic"
+                ? "automatic"
+                : "suggest",
+          },
+        });
+        if (id) onSaved();
+      }}
+    >
+      <Field label="Check for updates">
+        <select
+          className={workspaceSelectClass}
+          value={daily ? "daily" : "manual"}
+          onChange={(e) => setDaily(e.target.value === "daily")}
+        >
+          <option value="manual">Only when I ask</option>
+          <option value="daily">Every day</option>
+        </select>
+      </Field>
+      {daily ? (
+        <div className="grid gap-4 sm:grid-cols-[120px_1fr]">
+          <Field label="Start time">
             <Input
-              name="language"
-              defaultValue={config.language}
-              maxLength={100}
+              type="time"
+              required
+              name="time"
+              defaultValue={config.schedule?.time ?? "09:00"}
             />
           </Field>
-          <Field label="Search scope">
+          <TimezoneField defaultValue={config.schedule?.timezone} />
+        </div>
+      ) : null}
+      <Field label="When Relay finds something">
+        <select
+          className={workspaceSelectClass}
+          name="candidates"
+          defaultValue={config.candidates}
+        >
+          <option value="suggest">Let me choose what becomes a topic</option>
+          <option value="automatic">Add new topics automatically</option>
+        </select>
+      </Field>
+      <details className="workspace-disclosure">
+        <summary>Fine-tune what you discover</summary>
+        <div className="mt-4 grid gap-4">
+          <Field label="What interests you?">
+            <Textarea
+              name="brief"
+              defaultValue={config.brief}
+              maxLength={12000}
+              placeholder="Subjects to follow, what matters to your audience, and what to skip"
+            />
+          </Field>
+          <Field label="Search in">
             <select
-              className={workspaceSelectClass}
               name="scope"
+              className={workspaceSelectClass}
               defaultValue={config.scope}
             >
-              <option value="websites">Selected websites only</option>
-              <option value="web">Websites + wider web</option>
+              <option value="web">My websites and the wider web</option>
+              <option value="websites">Only my selected websites</option>
             </select>
           </Field>
-          <Field label="Discovery cadence">
-            <select
-              className={workspaceSelectClass}
-              name="cadence"
-              defaultValue={config.cadence}
-            >
-              <option value="manual">Manual</option>
-              <option value="daily">Daily</option>
-            </select>
-          </Field>
-          <Field label="New candidates">
-            <select
-              className={workspaceSelectClass}
-              name="candidates"
-              defaultValue={config.candidates}
-            >
-              <option value="suggest">Suggest topics</option>
-              <option value="automatic">Automatically add topics</option>
-            </select>
-          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Region (optional)">
+              <Input
+                name="region"
+                defaultValue={config.region}
+                maxLength={100}
+              />
+            </Field>
+            <Field label="Language (optional)">
+              <Input
+                name="language"
+                defaultValue={config.language}
+                maxLength={100}
+              />
+            </Field>
+          </div>
         </div>
-        <p className="text-xs leading-6 text-muted-foreground">
-          Automatically added topics use one-time research. Creating a topic
-          does not start paid research. Daily discovery uses Exa’s collection
-          interval, anchored to monitor creation.
-        </p>
-        <Button
-          className="justify-self-start"
-          disabled={action.busy}
-          type="submit"
-        >
-          Save settings
-        </Button>
-        {action.feedback}
-      </form>
-    </details>
+      </details>
+      <p className="text-xs leading-6 text-muted-foreground">
+        {daily
+          ? "Checks start at your chosen local time, including after daylight saving changes. New ideas appear here when the search finishes."
+          : "Your sources stay saved. Check for updates whenever you’re ready."}
+      </p>
+      {action.feedback}
+      <Button type="submit" disabled={action.busy}>
+        {action.busy ? "Saving…" : "Save schedule"}
+      </Button>
+    </form>
   );
 }
 type PublicMonitor = Omit<Doc<"monitors">, "secret">;
@@ -315,79 +367,97 @@ function MonitorEditor({
   projectId: string;
   monitor?: PublicMonitor;
 }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <WorkspaceDialog
+      open={open}
+      onOpenChange={setOpen}
+      title={monitor ? "Edit source" : "Follow something new"}
+      description="Tell Relay what to look for. You can focus on specific websites or explore the wider web."
+      trigger={
+        <Button variant="ghost" size="sm">
+          {monitor ? (
+            <SlidersHorizontal size={14} aria-hidden />
+          ) : (
+            <Plus size={15} aria-hidden />
+          )}
+          {monitor ? "Edit" : "Follow a source"}
+        </Button>
+      }
+    >
+      <MonitorForm
+        projectId={projectId}
+        monitor={monitor}
+        onSaved={() => setOpen(false)}
+      />
+    </WorkspaceDialog>
+  );
+}
+function MonitorForm({
+  projectId,
+  monitor,
+  onSaved,
+}: {
+  projectId: string;
+  monitor?: PublicMonitor;
+  onSaved: () => void;
+}) {
   const action = useCommand();
   const key = useRef(crypto.randomUUID());
   return (
-    <details className="py-3">
-      <summary className="cursor-pointer text-sm">
-        {monitor ? "Edit source" : "+ Add source"}
-      </summary>
-      <form
-        className="mt-4 grid max-w-xl gap-4"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const data = new FormData(form);
-          const saved = await action.run({
-            kind: "save_monitor",
-            projectId,
-            requestKey: key.current,
-            ...(monitor ? { monitorId: monitor._id } : {}),
-            name: value(data, "name"),
-            query: value(data, "query"),
-            domains: value(data, "domains")
-              .split(/[\s,]+/)
-              .filter(Boolean),
-            paused: data.get("paused") === "on",
-          });
-          if (saved && !monitor) {
-            form.reset();
-            key.current = crypto.randomUUID();
-          }
-        }}
-      >
-        <Field label="Source name">
-          <Input
-            name="name"
-            defaultValue={monitor?.name}
-            required
-            maxLength={160}
-          />
-        </Field>
-        <Field label="Search query">
-          <Textarea
-            name="query"
-            defaultValue={monitor?.query}
-            required
-            maxLength={4000}
-            placeholder="What developments should this source find?"
-          />
-        </Field>
-        <Field label="Website domains (optional, comma separated)">
-          <Input
-            name="domains"
-            defaultValue={monitor?.domains.join(", ")}
-            placeholder="example.org, example.com"
-          />
-        </Field>
-        <label className="flex gap-2 text-sm">
-          <input
-            type="checkbox"
-            name="paused"
-            defaultChecked={monitor?.paused ?? false}
-          />
-          Pause collection
-        </label>
-        <Button
-          type="submit"
-          disabled={action.busy}
-          className="justify-self-start"
-        >
-          {monitor ? "Save source" : "Add source"}
-        </Button>
-        {action.feedback}
-      </form>
-    </details>
+    <form
+      className="grid gap-5"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        const saved = await action.run({
+          kind: "save_monitor",
+          projectId,
+          requestKey: key.current,
+          ...(monitor ? { monitorId: monitor._id } : {}),
+          name: value(data, "name"),
+          query: value(data, "query"),
+          domains: value(data, "domains")
+            .split(/[\s,]+/)
+            .filter(Boolean),
+          paused: monitor?.paused ?? false,
+        });
+        if (saved) onSaved();
+      }}
+    >
+      <Field label="Name">
+        <Input
+          name="name"
+          defaultValue={monitor?.name}
+          placeholder="e.g. Open model releases"
+          required
+          maxLength={160}
+        />
+      </Field>
+      <Field label="What should Relay look for?">
+        <Textarea
+          name="query"
+          defaultValue={monitor?.query}
+          placeholder="New open-source AI models, practical tests, and pricing changes"
+          required
+          maxLength={4000}
+        />
+      </Field>
+      <Field label="Websites (optional)">
+        <Input
+          name="domains"
+          defaultValue={monitor?.domains.join(", ")}
+          placeholder="example.org, example.com"
+        />
+      </Field>
+      <p className="text-xs text-muted-foreground">
+        Leave websites empty to search more widely.
+      </p>
+      {action.feedback}
+      <Button type="submit" disabled={action.busy}>
+        {action.busy ? "Saving…" : monitor ? "Save source" : "Follow source"}
+      </Button>
+    </form>
   );
 }
 function MonitorRow({
@@ -400,103 +470,86 @@ function MonitorRow({
   const action = useCommand();
   const checkKey = useRef(crypto.randomUUID());
   return (
-    <article className="py-5">
-      <div className="flex flex-wrap justify-between gap-3">
-        <h2 className="text-sm font-medium">{m.name}</h2>
-        <span className="text-xs text-muted-foreground">
-          {m.removed
-            ? "Removal pending"
-            : m.paused
+    <article className="workspace-source-row">
+      <Radio size={18} className="mt-1 text-muted-foreground" aria-hidden />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h2 className="text-sm font-medium">{m.name}</h2>
+          <span className="text-xs text-muted-foreground">
+            {m.paused
               ? "Paused"
-              : m.sync === "ready"
-                ? (m.providerStatus ?? "Ready")
-                : m.sync}
-        </span>
-      </div>
-      <p className="mt-2 text-sm text-muted-foreground">{m.query}</p>
-      <p className="mt-2 text-xs text-muted-foreground">
-        {m.domains.join(", ") || "Search query · workspace scope"}
-      </p>
-      <div className="my-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
-        <span>
-          Last check: {stamp(m.lastCheck)}
-          {m.lastOutcome ? ` · ${m.lastOutcome}` : ""}
-        </span>
-        <span>Next check: {stamp(m.nextCheck)}</span>
-        <span>Provider: {m.providerStatus ?? "Not connected"}</span>
-      </div>
-      {m.error || m.collectionError ? (
-        <p role="status" className="my-3 text-sm text-destructive">
-          {m.error || m.collectionError}
+              : !available
+                ? "Saved"
+                : m.sync === "ready"
+                  ? "Following"
+                  : m.sync === "error"
+                    ? "Reconnecting"
+                    : "Connecting…"}
+          </span>
+        </div>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          {m.query}
         </p>
-      ) : null}
-      <div className="flex flex-wrap gap-2">
-        {!m.removed ? (
-          <>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={action.busy || !available || m.sync !== "ready"}
-              onClick={() =>
-                action.run({
-                  kind: "monitor_action",
-                  monitorId: m._id,
-                  action: "check",
-                  requestKey: `${checkKey.current}:${m.lastCheck ?? 0}`,
-                })
-              }
-            >
-              Check now
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={action.busy}
-              onClick={() =>
-                action.run({
-                  kind: "monitor_action",
-                  monitorId: m._id,
-                  action: m.paused ? "resume" : "pause",
-                })
-              }
-            >
-              {m.paused ? "Resume" : "Pause"}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={action.busy}
-              onClick={() =>
-                action.run({
-                  kind: "monitor_action",
-                  monitorId: m._id,
-                  action: "remove",
-                })
-              }
-            >
-              Remove
-            </Button>
-          </>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {m.domains.join(" · ") || "Across the web"}
+          {m.lastCheck ? ` · Last checked ${stamp(m.lastCheck)}` : ""}
+        </p>
+        {m.error && available ? (
+          <p role="status" className="mt-2 text-xs text-muted-foreground">
+            This source needs attention. Relay will try reconnecting
+            automatically.
+          </p>
         ) : null}
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={action.busy || !available}
-          onClick={() =>
-            action.run({
-              kind: "monitor_action",
-              monitorId: m._id,
-              action: "sync",
-            })
-          }
-        >
-          Reconcile
-        </Button>
+        <div className="mt-3 flex flex-wrap items-center gap-1">
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={
+              action.busy || !available || m.sync !== "ready"
+            }
+            onClick={async () => {
+              await action.run({
+                kind: "monitor_action",
+                monitorId: m._id,
+                action: "check",
+                requestKey: `${checkKey.current}:${m.lastCheck ?? 0}`,
+              });
+            }}
+          >
+            Check now
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={action.busy}
+            onClick={() =>
+              action.run({
+                kind: "monitor_action",
+                monitorId: m._id,
+                action: m.paused ? "resume" : "pause",
+              })
+            }
+          >
+            {m.paused ? "Resume" : "Pause"}
+          </Button>
+          <MonitorEditor projectId={m.projectId} monitor={m} />
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={action.busy}
+            onClick={() =>
+              action.run({
+                kind: "monitor_action",
+                monitorId: m._id,
+                action: "remove",
+              })
+            }
+          >
+            Unfollow
+          </Button>
+        </div>
+        {action.feedback}
       </div>
-      {!m.removed ? (
-        <MonitorEditor projectId={m.projectId} monitor={m} />
-      ) : null}
-      {action.feedback}
     </article>
   );
 }
@@ -508,10 +561,10 @@ function UpdateCard({
   topics: Doc<"topics">[];
 }) {
   const action = useCommand();
-  const [creating, setCreating] = useState(false);
+  const router = useRouter();
   const [attaching, setAttaching] = useState(false);
   return (
-    <article className="space-y-3 py-6">
+    <article className="workspace-update">
       <h2 className="font-medium">{u.title}</h2>
       <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
         {u.explanation}
@@ -530,7 +583,7 @@ function UpdateCard({
         ))}
       </div>
       <p className="text-xs text-muted-foreground">
-        Found {stamp(u.discoveredAt)} · Updated {stamp(u.updatedAt)}
+        Found {stamp(u.discoveredAt)}
       </p>
       {u.createdTopicId ? (
         <Link
@@ -545,19 +598,26 @@ function UpdateCard({
         <div className="flex flex-wrap gap-2">
           <Button
             size="sm"
-            onClick={() => {
-              setCreating(!creating);
-              setAttaching(false);
+            disabled={action.busy}
+            onClick={async () => {
+              const id = await action.run({
+                kind: "topic_from_update",
+                updateId: u._id,
+                title: u.title,
+                question: u.question,
+                angle: u.angle,
+              });
+              if (id) router.push(`/projects/${u.projectId}?topic=${id}`);
             }}
           >
-            Create topic
+            Make this a topic <ArrowRight size={14} aria-hidden />
           </Button>
           <Button
             size="sm"
             variant="ghost"
+            disabled={action.busy || topics.length === 0}
             onClick={() => {
               setAttaching(!attaching);
-              setCreating(false);
             }}
           >
             Attach to topic
@@ -574,53 +634,6 @@ function UpdateCard({
           </Button>
         </div>
       )}
-      {creating && !u.createdTopicId && !u.dismissed ? (
-        <form
-          className="grid max-w-xl gap-4 py-3"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget);
-            const id = await action.run({
-              kind: "topic_from_update",
-              updateId: u._id,
-              title: value(data, "title"),
-              question: value(data, "question"),
-              angle: value(data, "angle"),
-            });
-            if (id) setCreating(false);
-          }}
-        >
-          <Field label="Title">
-            <Input
-              name="title"
-              defaultValue={u.title}
-              required
-              maxLength={160}
-            />
-          </Field>
-          <Field label="Central question">
-            <Textarea
-              name="question"
-              defaultValue={u.question}
-              required
-              maxLength={12000}
-            />
-          </Field>
-          <Field label="Angle">
-            <Textarea name="angle" defaultValue={u.angle} maxLength={8000} />
-          </Field>
-          <p className="text-xs text-muted-foreground">
-            One-time topic. Research starts only when requested.
-          </p>
-          <Button
-            type="submit"
-            disabled={action.busy}
-            className="justify-self-start"
-          >
-            Create topic
-          </Button>
-        </form>
-      ) : null}
       {attaching ? (
         <form
           className="flex flex-wrap items-end gap-3"
@@ -657,179 +670,101 @@ function UpdateCard({
     </article>
   );
 }
-export function TopicBrief({ topic: t }: { topic: Doc<"topics"> }) {
-  const router = useRouter();
+export function TopicBrief({
+  topic: t,
+  onResearch,
+}: {
+  topic: Doc<"topics">;
+  onResearch?: () => void;
+}) {
   const context = useQuery(api.discovery.topicContext, { topicId: t._id });
-  const action = useCommand();
-  const [mode, setMode] = useState(t.frequency?.kind ?? "once");
-  const followKey = useRef(crypto.randomUUID());
+  const [editing, setEditing] = useState(false);
   return (
-    <div className="space-y-8">
-      <form
-        key={t._id}
-        className="grid max-w-2xl gap-5"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget);
-          await action.run({
-            kind: "save_brief",
-            topicId: t._id,
-            title: value(data, "title"),
-            question: value(data, "question"),
-            angle: value(data, "angle"),
-            coverage: value(data, "coverage"),
-            status:
-              value(data, "status") === "archived"
-                ? "archived"
-                : value(data, "status") === "completed"
-                  ? "completed"
-                  : "active",
-            frequency:
-              mode === "daily"
-                ? {
-                    kind: "daily",
-                    time: value(data, "time"),
-                    timezone: value(data, "timezone"),
-                    paused: data.get("paused") === "on",
-                  }
-                : { kind: "once" },
-          });
-        }}
-      >
-        <Field label="Title">
-          <Input name="title" defaultValue={t.title} required maxLength={160} />
-        </Field>
-        <Field label="Central question">
-          <Textarea
-            name="question"
-            defaultValue={t.question}
-            required
-            maxLength={12000}
-          />
-        </Field>
-        <Field label="Angle">
-          <Textarea name="angle" defaultValue={t.angle} maxLength={8000} />
-        </Field>
-        <Field label="Intended coverage">
-          <Textarea
-            name="coverage"
-            defaultValue={t.coverage}
-            maxLength={12000}
-          />
-        </Field>
-        <details className="border-y border-border py-3">
-          <summary className="cursor-pointer text-sm">
-            Research settings ·{" "}
-            {t.frequency?.kind === "daily"
-              ? t.frequency.paused
-                ? "Daily, paused"
-                : "Daily"
-              : "One-time"}
-          </summary>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <Field label="Research frequency">
-              <select
-                className={workspaceSelectClass}
-                value={mode}
-                onChange={(e) =>
-                  setMode(e.target.value === "daily" ? "daily" : "once")
-                }
-              >
-                <option value="once">One-time</option>
-                <option value="daily">Daily</option>
-              </select>
-            </Field>
-            <Field label="Topic status">
-              <select
-                className={workspaceSelectClass}
-                name="status"
-                defaultValue={t.status ?? "active"}
-              >
-                <option value="active">Active</option>
-                <option value="completed">Completed</option>
-                <option value="archived">Archived</option>
-              </select>
-            </Field>
-            {mode === "daily" ? (
-              <>
-                <Field label="Starts at (local time)">
-                  <Input
-                    name="time"
-                    type="time"
-                    required
-                    defaultValue={
-                      t.frequency?.kind === "daily" ? t.frequency.time : "09:00"
-                    }
-                  />
-                </Field>
-                <Field label="IANA timezone">
-                  <Input
-                    name="timezone"
-                    required
-                    defaultValue={
-                      t.frequency?.kind === "daily"
-                        ? t.frequency.timezone
-                        : Intl.DateTimeFormat().resolvedOptions().timeZone
-                    }
-                    placeholder="Asia/Kolkata"
-                  />
-                </Field>
-                <label className="flex gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    name="paused"
-                    defaultChecked={
-                      t.frequency?.kind === "daily" && t.frequency.paused
-                    }
-                  />
-                  Pause daily research
-                </label>
-              </>
-            ) : null}
-          </div>
-          <p className="mt-4 text-xs leading-6 text-muted-foreground">
-            {mode === "once"
-              ? "Run explicitly and rerun when needed. Creating a topic does not start paid research."
-              : "Paid provider work starts at the configured time. A connected agent must synthesize and save the findings. Completing or archiving pauses research; workspace discovery continues."}
-          </p>
-          {t.nextResearchAt ? (
-            <p className="mt-2 text-xs">
-              Next starts at {stamp(t.nextResearchAt)}
-            </p>
+    <div className="workspace-topic-brief">
+      <div className="workspace-heading-row !mb-6">
+        <h2 className="text-sm font-medium">The direction</h2>
+        <WorkspaceDialog
+          open={editing}
+          onOpenChange={setEditing}
+          title="Edit the brief"
+          description="Give your agent the direction it needs. A clear question is enough to start."
+          trigger={
+            <Button variant="ghost" size="sm">
+              <SlidersHorizontal size={14} aria-hidden />
+              Edit brief
+            </Button>
+          }
+        >
+          <BriefEditor topic={t} onSaved={() => setEditing(false)} />
+        </WorkspaceDialog>
+      </div>
+      {t.angle || t.coverage ? (
+        <dl className="workspace-brief-details">
+          {t.angle ? (
+            <div>
+              <dt>Angle</dt>
+              <dd>{t.angle}</dd>
+            </div>
           ) : null}
-        </details>
-        <Button
-          type="submit"
-          disabled={action.busy}
-          className="justify-self-start"
-        >
-          Save brief
-        </Button>
-        {action.feedback}
-      </form>
-      {t.parentTopicId ? (
-        <Link
-          className="text-sm underline underline-offset-4"
-          href={`/projects/${t.projectId}?topic=${t.parentTopicId}`}
-        >
-          Original video idea →
-        </Link>
-      ) : null}
-      <section>
-        <h2 className="mb-3 text-sm font-medium">Relevant discovery updates</h2>
-        {!context ? (
-          <DocumentLoading />
-        ) : context.updates.length ? (
-          context.updates.map((u) => (
-            <div key={u._id} className="border-b border-border py-3">
-              <p className="text-sm">{u.title}</p>
-              <p className="mt-1 text-sm text-muted-foreground">
+          {t.coverage ? (
+            <div>
+              <dt>What to cover</dt>
+              <dd>{t.coverage}</dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : (
+        <p className="max-w-xl text-sm leading-7 text-muted-foreground">
+          Your question is ready. Your agent can develop the angle and coverage
+          as it researches.
+        </p>
+      )}
+      <div className="workspace-next-step">
+        <p className="workspace-eyebrow">Up next</p>
+        <h2 className="text-lg font-medium">
+          Let your agent take it from here.
+        </h2>
+        <p className="mt-2 max-w-lg text-sm leading-7 text-muted-foreground">
+          Ask your connected agent to research this topic. The findings and
+          sources appear here, ready for your review.
+        </p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <AgentPrompt
+            label="Research with my agent"
+            prompt={`Research the Relay topic “${t.title}” (topic ID ${t._id}) in project ${t.projectId}. Investigate: ${t.question}. Develop the angle and coverage, read supporting sources, and save the completed research in Relay for my review. Manage the intermediate steps yourself.`}
+          />
+          {onResearch ? (
+            <Button variant="ghost" onClick={onResearch}>
+              View research <ArrowRight size={14} aria-hidden />
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      <div className="mt-6">
+        <ResearchSchedule topic={t} />
+        {t.nextResearchAt ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Next starts{" "}
+            {formatScheduleTime(
+              t.nextResearchAt,
+              t.frequency?.kind !== "once" ? t.frequency?.timezone : undefined,
+            )}
+          </p>
+        ) : null}
+      </div>
+      {context?.updates.length ? (
+        <details className="workspace-disclosure mt-9">
+          <summary>Inspiration & sources · {context.updates.length}</summary>
+          {context.updates.map((u) => (
+            <div key={u._id} className="py-4">
+              <p className="text-sm font-medium">{u.title}</p>
+              <p className="mt-2 text-sm leading-7 text-muted-foreground">
                 {u.explanation}
               </p>
               <div className="mt-2 flex flex-wrap gap-3">
                 {u.links.map((url) => (
                   <a
-                    className="text-xs underline"
+                    className="text-xs underline underline-offset-4"
                     key={url}
                     href={url}
                     target="_blank"
@@ -840,62 +775,94 @@ export function TopicBrief({ topic: t }: { topic: Doc<"topics"> }) {
                 ))}
               </div>
             </div>
-          ))
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            No discovery updates attached.
-          </p>
-        )}
-      </section>
-      <section>
-        <h2 className="mb-3 text-sm font-medium">Linked monitoring sources</h2>
-        {context?.monitors.map((m) => (
-          <p key={m._id} className="my-2 text-sm">
-            {m.name} · {m.paused ? "Paused" : m.sync}
-          </p>
-        ))}
+          ))}
+        </details>
+      ) : null}
+      {t.parentTopicId ? (
         <Link
-          className="text-xs underline underline-offset-4"
-          href={`/projects/${t.projectId}?view=discover`}
+          className="mt-6 block text-sm underline underline-offset-4"
+          href={`/projects/${t.projectId}?topic=${t.parentTopicId}`}
         >
-          Manage sources in Discover
+          Original topic →
         </Link>
-      </section>
-      <details>
-        <summary className="cursor-pointer text-sm">
-          Create a follow-up video idea
-        </summary>
-        <form
-          className="mt-4 grid max-w-xl gap-4"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget);
-            const id = await action.run({
-              kind: "follow_up",
-              topicId: t._id,
-              requestKey: followKey.current,
-              title: value(data, "title"),
-              question: value(data, "question"),
-            });
-            if (id) router.push(`/projects/${t.projectId}?topic=${id}`);
-          }}
-        >
-          <Field label="Follow-up title">
-            <Input name="title" required maxLength={160} />
-          </Field>
-          <Field label="Central question">
-            <Textarea name="question" required maxLength={12000} />
-          </Field>
-          <Button
-            type="submit"
-            disabled={action.busy}
-            className="justify-self-start"
-          >
-            Create linked topic
-          </Button>
-        </form>
-      </details>
+      ) : null}
     </div>
+  );
+}
+function BriefEditor({
+  topic: t,
+  onSaved,
+}: {
+  topic: Doc<"topics">;
+  onSaved: () => void;
+}) {
+  const action = useCommand();
+  return (
+    <form
+      className="grid gap-5"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        const saved = await action.run({
+          kind: "save_brief",
+          topicId: t._id,
+          title: value(data, "title"),
+          question: value(data, "question"),
+          angle: value(data, "angle"),
+          coverage: value(data, "coverage"),
+          status:
+            value(data, "status") === "archived"
+              ? "archived"
+              : value(data, "status") === "completed"
+                ? "completed"
+                : "active",
+          frequency: t.frequency ?? { kind: "once" },
+        });
+        if (saved) onSaved();
+      }}
+    >
+      <Field label="Title">
+        <Input name="title" defaultValue={t.title} required maxLength={160} />
+      </Field>
+      <Field label="Research question">
+        <Textarea
+          name="question"
+          defaultValue={t.question}
+          required
+          maxLength={12000}
+        />
+      </Field>
+      <details className="workspace-disclosure">
+        <summary>More direction (optional)</summary>
+        <div className="mt-4 grid gap-4">
+          <Field label="Angle">
+            <Textarea name="angle" defaultValue={t.angle} maxLength={8000} />
+          </Field>
+          <Field label="What to cover">
+            <Textarea
+              name="coverage"
+              defaultValue={t.coverage}
+              maxLength={12000}
+            />
+          </Field>
+          <Field label="Topic status">
+            <select
+              className={workspaceSelectClass}
+              name="status"
+              defaultValue={t.status ?? "active"}
+            >
+              <option value="active">Active</option>
+              <option value="completed">Completed</option>
+              <option value="archived">Archived</option>
+            </select>
+          </Field>
+        </div>
+      </details>
+      {action.feedback}
+      <Button type="submit" disabled={action.busy}>
+        {action.busy ? "Saving…" : "Save brief"}
+      </Button>
+    </form>
   );
 }
 export function InvestigationStatus({
@@ -913,9 +880,9 @@ export function InvestigationStatus({
     <section className="my-6 border-l-2 border-border pl-4">
       <p role="status" className="text-sm">
         {current.state.kind === "waiting_for_agent"
-          ? "Waiting for agent"
+          ? "Sources are ready for your agent"
           : current.state.kind === "provider"
-            ? "Provider investigation in progress"
+            ? "Gathering fresh sources…"
             : current.state.kind === "unavailable"
               ? "Research unavailable"
               : current.state.outcome === "no_material_update"
@@ -925,23 +892,27 @@ export function InvestigationStatus({
       {current.state.kind === "waiting_for_agent" ? (
         <div className="mt-3">
           <AgentPrompt
-            prompt={`Read pending investigation ${current._id} for Relay topic ${topicId}. Inspect its provider packet and evidence, investigate gaps, then update the canonical research using expectedRevision. Finish the investigation with the exact saved revision; record no_material_update only if the completed investigation supports it. Human approval remains separate.`}
+            prompt={`Finish the pending research for Relay topic ${topicId}, investigation ${current._id}. Read the collected sources, investigate gaps, and save the findings in Relay. Close this investigation against the saved research, then leave it for my review. If nothing significant changed, explain why.`}
           />
         </div>
       ) : null}
       {current.state.kind === "unavailable" ? (
         <p className="mt-2 text-xs text-muted-foreground">
-          {current.state.reason}
+          Research couldn’t finish this time. Ask your agent to try again.
         </p>
       ) : null}
       <details className="mt-3 text-xs text-muted-foreground">
-        <summary className="cursor-pointer">Investigation history</summary>
+        <summary className="cursor-pointer">Recent research</summary>
         {rows.map((i) => (
           <p key={i._id} className="my-3">
             {stamp(i.due)} ·{" "}
             {i.state.kind === "closed"
               ? `${i.state.outcome.replaceAll("_", " ")} · ${i.state.explanation}`
-              : i.state.kind.replaceAll("_", " ")}
+              : i.state.kind === "provider"
+                ? "Gathering sources"
+                : i.state.kind === "waiting_for_agent"
+                  ? "Ready for your agent"
+                  : "Couldn’t complete research"}
           </p>
         ))}
       </details>

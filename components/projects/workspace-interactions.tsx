@@ -95,9 +95,11 @@ export function WorkspaceDialog({
         showCloseButton={false}
         className="workspace-dialog research-workspace"
         initialFocus={() =>
-          document.querySelector<HTMLElement>(
-            ".workspace-dialog input, .workspace-dialog textarea",
-          )
+          [
+            ...document.querySelectorAll<HTMLElement>(
+              ".workspace-dialog input, .workspace-dialog select, .workspace-dialog textarea",
+            ),
+          ].find((element) => element.getClientRects().length > 0) ?? null
         }
         finalFocus={() =>
           returnFocusRef?.current?.isConnected
@@ -133,7 +135,13 @@ export function WorkspaceDialog({
   );
 }
 
-export function AgentPrompt({ prompt }: { prompt: string }) {
+export function AgentPrompt({
+  prompt,
+  label = "Continue with my agent",
+}: {
+  prompt: string;
+  label?: string;
+}) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   return (
@@ -143,7 +151,7 @@ export function AgentPrompt({ prompt }: { prompt: string }) {
       trigger={
         <Button variant="outline">
           <ArrowUpRight aria-hidden />
-          Copy agent prompt
+          {label}
         </Button>
       }
     >
