@@ -61,10 +61,10 @@ export function ProjectFrame({
             aria-current={pathname === "/projects" ? "page" : undefined}
           >
             <Folder size={16} aria-hidden />
-            All projects
+            All workspaces
           </Link>
           <p className="mb-2 mt-8 px-2 text-xs font-medium text-muted-foreground">
-            Projects
+            Workspaces
           </p>
           {projects?.kind === "projects"
             ? projects.projects.map((project) => (
@@ -101,7 +101,7 @@ export function ProjectFrame({
           </summary>
           <div className="absolute end-0 top-12 z-40 w-56 rounded-lg border border-border bg-background p-2 shadow-lg">
             <Link href="/projects" className="workspace-nav-item">
-              All projects
+              All workspaces
             </Link>
           </div>
         </details>
@@ -115,9 +115,9 @@ export function ProjectFrame({
       <div className="min-w-0">
         <header className="workspace-topbar">
           <Link href="/projects" className="text-muted-foreground">
-            Projects
+            Workspaces
           </Link>
-          {title !== "Projects" ? (
+          {title !== "Workspaces" ? (
             <>
               <ChevronRight
                 size={13}

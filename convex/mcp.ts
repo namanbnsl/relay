@@ -1,4 +1,5 @@
 "use node";
+import { discoveryCommand } from "./model/discoveryContracts";
 import { sourceCommand, sourceResult } from "./model/draftContracts";
 import type { writeOwned } from "./research";
 import {
@@ -156,5 +157,27 @@ export const sources = action({
   ): Promise<Infer<typeof sourceResult>> => {
     const subject = await verify(token);
     return ctx.runAction(internal.sourceActions.execute, { subject, command });
+  },
+});
+
+export const discoveryRead = action({
+  args: { token: v.string(), projectId: v.string() },
+  handler: async (
+    ctx,
+    { token, projectId },
+  ): Promise<Awaited<ReturnType<typeof import("./discovery").readOwned>>> => {
+    const subject = await verify(token);
+    return ctx.runQuery(internal.discovery.readFromMcp, { subject, projectId });
+  },
+});
+export const discoveryWrite = action({
+  args: { token: v.string(), command: discoveryCommand },
+  returns: v.string(),
+  handler: async (ctx, { token, command }): Promise<string> => {
+    const subject = await verify(token);
+    return ctx.runMutation(internal.discovery.writeFromMcp, {
+      subject,
+      command,
+    });
   },
 });

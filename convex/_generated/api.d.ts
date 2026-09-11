@@ -8,19 +8,28 @@
  * @module
  */
 
+import type * as crons from "../crons.js";
+import type * as discovery from "../discovery.js";
+import type * as http from "../http.js";
 import type * as mcp from "../mcp.js";
 import type * as model_auth from "../model/auth.js";
+import type * as model_discoveryContracts from "../model/discoveryContracts.js";
 import type * as model_draftContracts from "../model/draftContracts.js";
 import type * as model_drafts from "../model/drafts.js";
 import type * as model_exa from "../model/exa.js";
+import type * as model_monitorExa from "../model/monitorExa.js";
 import type * as model_researchContracts from "../model/researchContracts.js";
+import type * as model_schedule from "../model/schedule.js";
 import type * as model_validators from "../model/validators.js";
 import type * as model_workflow from "../model/workflow.js";
+import type * as monitorActions from "../monitorActions.js";
+import type * as monitorState from "../monitorState.js";
 import type * as relay from "../relay.js";
 import type * as research from "../research.js";
 import type * as researchActions from "../researchActions.js";
 import type * as researchSteps from "../researchSteps.js";
 import type * as researchWorkflow from "../researchWorkflow.js";
+import type * as schedules from "../schedules.js";
 import type * as sourceActions from "../sourceActions.js";
 import type * as sources from "../sources.js";
 
@@ -31,19 +40,28 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  crons: typeof crons;
+  discovery: typeof discovery;
+  http: typeof http;
   mcp: typeof mcp;
   "model/auth": typeof model_auth;
+  "model/discoveryContracts": typeof model_discoveryContracts;
   "model/draftContracts": typeof model_draftContracts;
   "model/drafts": typeof model_drafts;
   "model/exa": typeof model_exa;
+  "model/monitorExa": typeof model_monitorExa;
   "model/researchContracts": typeof model_researchContracts;
+  "model/schedule": typeof model_schedule;
   "model/validators": typeof model_validators;
   "model/workflow": typeof model_workflow;
+  monitorActions: typeof monitorActions;
+  monitorState: typeof monitorState;
   relay: typeof relay;
   research: typeof research;
   researchActions: typeof researchActions;
   researchSteps: typeof researchSteps;
   researchWorkflow: typeof researchWorkflow;
+  schedules: typeof schedules;
   sourceActions: typeof sourceActions;
   sources: typeof sources;
 }>;

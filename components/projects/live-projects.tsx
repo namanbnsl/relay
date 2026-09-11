@@ -1,7 +1,18 @@
 "use client";
+import {
+  Discover,
+  WorkspaceNavigation,
+  TopicBrief,
+  InvestigationStatus,
+} from "./discovery-workspace";
 import { ResearchExecution } from "./research-execution";
 
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import {
+  useConvexAuth,
+  useMutation,
+  useQuery,
+  usePaginatedQuery,
+} from "convex/react";
 import { ConvexError } from "convex/values";
 import type { FunctionArgs } from "convex/server";
 import Link from "next/link";
@@ -61,7 +72,7 @@ export function useRelayWrite() {
       toast.add({
         title:
           command.kind === "create_project"
-            ? "Project created"
+            ? "Workspace created"
             : command.kind === "create_topic"
               ? "Topic created"
               : command.kind === "review_research" ||
@@ -159,9 +170,9 @@ export function Projects() {
         }, [])
       : [];
   return (
-    <ProjectFrame title="Projects">
+    <ProjectFrame title="Workspaces">
       <WorkspaceHeading
-        title="Projects"
+        title="Workspaces"
         description="Research and scripts, saved in one place."
         action={
           <Button
@@ -171,7 +182,7 @@ export function Projects() {
             }}
           >
             <Plus aria-hidden />
-            New project
+            New workspace
           </Button>
         }
       />
@@ -179,8 +190,8 @@ export function Projects() {
         open={adding}
         returnFocusRef={createTrigger}
         onOpenChange={setAdding}
-        title="Create a project"
-        description="A space for related research and scripts."
+        title="Create a workspace"
+        description="One YouTube channel or editorial project."
         trigger={<button className="hidden" aria-hidden tabIndex={-1} />}
       >
         <form
@@ -210,17 +221,17 @@ export function Projects() {
             className="justify-self-start"
             type="submit"
           >
-            {pending ? "Saving…" : "Create project"}
+            {pending ? "Saving…" : "Create workspace"}
           </Button>
         </form>
         <ErrorMessage error={error} />
       </WorkspaceDialog>
       <SearchInput
         className="workspace-search"
-        label="Find a project"
+        label="Find a workspace"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder="Find a project…"
+        placeholder="Find a workspace…"
       />
       {!data ? (
         <DocumentLoading />
@@ -229,7 +240,7 @@ export function Projects() {
           {data.projects.length === 0 ? (
             <EmptyDocument
               title="A home for your next idea"
-              description="Create a project, add a topic, and turn research into a script."
+              description="Create a workspace, add a topic, and turn research into a script."
             >
               <Button
                 onClick={(event) => {
@@ -238,7 +249,7 @@ export function Projects() {
                 }}
               >
                 <Plus aria-hidden />
-                Create a project
+                Create a workspace
               </Button>
             </EmptyDocument>
           ) : (
@@ -246,7 +257,7 @@ export function Projects() {
           )}
           {data.projects.length > 0 && projectRows.length === 0 ? (
             <EmptyDocument
-              title="No matching projects"
+              title="No matching workspaces"
               description="Try a different name or clear your search."
             >
               <Button variant="outline" onClick={() => setSearch("")}>
@@ -268,6 +279,7 @@ export function Project({ projectId }: { projectId: string }) {
   const { write, pending, error } = useRelayWrite();
   const searchParams = useSearchParams();
   const selected = searchParams.get("topic") ?? "";
+  const discover = searchParams.get("view") === "discover";
   const topicRequest = useRef<string | null>(null);
   function setSelected(topicId: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -285,7 +297,7 @@ export function Project({ projectId }: { projectId: string }) {
   const [search, setSearch] = useState("");
   if (!data || data.kind !== "project")
     return (
-      <ProjectFrame title="Project">
+      <ProjectFrame title="Workspace">
         <DocumentLoading />
       </ProjectFrame>
     );
@@ -319,6 +331,18 @@ export function Project({ projectId }: { projectId: string }) {
               <p className="mt-1 line-clamp-1 text-[13px] text-muted-foreground">
                 {topic.question}
               </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {topic.frequency?.kind === "daily"
+                  ? topic.frequency.paused
+                    ? "Daily · Paused"
+                    : "Daily"
+                  : "One-time"}{" "}
+                ·{" "}
+                {topic.status && topic.status !== "active"
+                  ? topic.status
+                  : (data.topicStates?.find((s) => s.topicId === topic._id)
+                      ?.status ?? "Not researched")}
+              </p>
             </div>
             <ChevronRight
               size={16}
@@ -331,7 +355,10 @@ export function Project({ projectId }: { projectId: string }) {
       }, []);
   return (
     <ProjectFrame title={data.project.name}>
-      {selected ? (
+      <WorkspaceNavigation projectId={projectId} discover={discover} />
+      {discover ? (
+        <Discover projectId={projectId} topics={data.topics} />
+      ) : selected ? (
         <Topic
           key={selected}
           topicId={selected}
@@ -471,10 +498,10 @@ function Topic({
   const data = useQuery(api.relay.read, {
     command: { kind: "topic", topicId },
   });
-  const [tab, setTab] = useState<"research" | "script">("research");
+  const [tab, setTab] = useState<"brief" | "research" | "script">("brief");
   if (!data || data.kind !== "topic") return <DocumentLoading />;
   if (data.topic.projectId !== projectId)
-    return <p>Topic not found in this project.</p>;
+    return <p>Topic not found in this workspace.</p>;
   const latest = data.research[0];
   const script = data.scripts[0];
   return (
@@ -493,37 +520,46 @@ function Topic({
       </p>
       <div className="workspace-document-nav">
         <nav aria-label="Topic sections" className="flex gap-5">
-          {(["research", "script"] satisfies Array<typeof tab>).map((item) => (
-            <button
-              key={item}
-              aria-pressed={tab === item}
-              onClick={() => setTab(item)}
-              data-document-navigation
-              className={`min-h-10 border-b-2 text-sm capitalize focus-visible:outline-2 ${tab === item ? "border-foreground" : "border-transparent text-muted-foreground"}`}
-            >
-              {item === "research" ? (
-                <FileText size={15} aria-hidden />
-              ) : (
-                <Layers2 size={15} aria-hidden />
-              )}
-              {item}
-            </button>
-          ))}
+          {(["brief", "research", "script"] satisfies Array<typeof tab>).map(
+            (item) => (
+              <button
+                key={item}
+                aria-pressed={tab === item}
+                onClick={() => setTab(item)}
+                data-document-navigation
+                className={`min-h-10 border-b-2 text-sm capitalize focus-visible:outline-2 ${tab === item ? "border-foreground" : "border-transparent text-muted-foreground"}`}
+              >
+                {item === "research" ? (
+                  <FileText size={15} aria-hidden />
+                ) : (
+                  <Layers2 size={15} aria-hidden />
+                )}
+                {item}
+              </button>
+            ),
+          )}
         </nav>
-        <TopicHistory
-          tab={tab}
-          research={data.research}
-          scripts={data.scripts}
-        />
+        {tab !== "brief" ? <TopicHistory topicId={topicId} tab={tab} /> : null}
       </div>
-      {tab === "research" ? <ResearchExecution topicId={topicId} /> : null}
-      <TopicDocument
-        tab={tab}
-        latest={latest}
-        script={script}
-        data={data}
-        onViewResearch={() => setTab("research")}
-      />
+      {tab === "brief" ? (
+        <TopicBrief topic={data.topic} />
+      ) : (
+        <>
+          <TopicDocument
+            tab={tab}
+            latest={latest}
+            script={script}
+            data={data}
+            onViewResearch={() => setTab("research")}
+          />
+          {tab === "research" ? (
+            <>
+              <InvestigationStatus projectId={projectId} topicId={topicId} />
+              <ResearchExecution topicId={topicId} />
+            </>
+          ) : null}
+        </>
+      )}
     </>
   );
 }
@@ -531,15 +567,21 @@ type TopicData = {
   topic: Doc<"topics">;
   research: Doc<"researchVersions">[];
   scripts: Doc<"scriptVersions">[];
+  draft?: Doc<"researchDrafts"> | null;
 };
 function TopicHistory({
+  topicId,
   tab,
-  research,
-  scripts,
-}: Pick<TopicData, "research" | "scripts"> & {
+}: {
+  topicId: string;
   tab: "research" | "script";
 }) {
-  const rows = tab === "research" ? research : scripts;
+  const history = usePaginatedQuery(
+    api.relay.history,
+    { topicId, kind: tab },
+    { initialNumItems: 10 },
+  );
+  const rows = history.results;
   return (
     <WorkspaceDialog
       title="Document history"
@@ -582,6 +624,14 @@ function TopicHistory({
             </div>
           </details>
         ))}
+        {history.status === "CanLoadMore" ? (
+          <Button variant="outline" onClick={() => history.loadMore(10)}>
+            Load older versions
+          </Button>
+        ) : history.status === "LoadingMore" ||
+          history.status === "LoadingFirstPage" ? (
+          <p role="status">Loading history…</p>
+        ) : null}
         {rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Saved versions will appear here.
@@ -608,7 +658,19 @@ function TopicDocument({
     <div className="workspace-document">
       {tab === "research" ? (
         latest ? (
-          <Research row={latest} />
+          <>
+            <Research row={latest} />
+            {data.draft?.openQuestions.length ? (
+              <section className="mt-8">
+                <h3 className="text-sm font-medium">Gaps & open questions</h3>
+                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
+                  {data.draft.openQuestions.map((q) => (
+                    <li key={q}>{q}</li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+          </>
         ) : (
           <EmptyDocument
             title="Ready for a little discovery"
@@ -1067,6 +1129,15 @@ function ScriptDocument({
     !source || source.review.kind !== "approved" || latest?._id !== source._id;
   return (
     <section className="max-w-[720px]">
+      <p className="mb-4 text-xs text-muted-foreground">
+        Based on approved research{" "}
+        {source?.draftRevision
+          ? `revision ${source.draftRevision}`
+          : source
+            ? `saved ${new Date(source._creationTime).toLocaleDateString()}`
+            : row.researchVersionId}
+        . Approval remains attached to that exact version.
+      </p>
       {!editing ? (
         <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs text-muted-foreground">

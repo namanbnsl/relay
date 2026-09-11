@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { api } from "@/convex/_generated/api";
-import { ArrowUpRight, Loader2, Search } from "lucide-react";
+import { ArrowUpRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Doc } from "@/convex/_generated/dataModel";
 

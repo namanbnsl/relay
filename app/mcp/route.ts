@@ -5,6 +5,7 @@ import type { FunctionArgs } from "convex/server";
 import { mcpError } from "@/lib/mcp-errors";
 import { createMcpHandler, withMcpAuth } from "mcp-handler";
 import { z } from "zod";
+import { discoveryInput } from "@/convex/model/discoveryContracts";
 import {
   draftInput,
   researchSaveInput,
@@ -152,6 +153,64 @@ const handler = createMcpHandler(
         return mcpError(error, command.kind);
       }
     }
+    server.registerTool(
+      "get_discovery",
+      {
+        description:
+          "Read owned workspace discovery settings, monitor health, sourced updates, and pending investigations. waiting_for_agent means inspect the run packet/evidence, synthesize using save_research, then finish_investigation. Provider completion is not completed research or human approval.",
+        inputSchema: z.object({ projectId: id }),
+        annotations: { readOnlyHint: true, openWorldHint: false },
+      },
+      async (args, extra) => {
+        try {
+          const token = extra.http?.authInfo?.token;
+          if (!token) throw new Error("Authentication required.");
+          const url = process.env.NEXT_PUBLIC_CONVEX_URL;
+          if (!url) throw new Error("Backend unavailable.");
+          const data = await new ConvexHttpClient(url).action(
+            api.mcp.discoveryRead,
+            { token, ...args },
+          );
+          return {
+            structuredContent: data,
+            content: [{ type: "text", text: JSON.stringify(data) }],
+          };
+        } catch (error) {
+          return mcpError(error, "get_discovery");
+        }
+      },
+    );
+    server.registerTool(
+      "update_workspace",
+      {
+        description:
+          "Configure discovery, manage monitors, dismiss or attach updates, create a one-time topic from an update, edit a brief/frequency, create a linked follow-up, or finish an investigated cycle. Saving a source may activate paid monitoring if configured; daily research authorizes paid provider work. Creating/attaching a topic never starts research. Human approval is unavailable through this tool. No-material-update requires a completed investigation and a reason, never just an empty monitor feed.",
+        inputSchema: z.object({ command: discoveryInput }),
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          openWorldHint: true,
+        },
+      },
+      async (args, extra) => {
+        try {
+          const token = extra.http?.authInfo?.token;
+          if (!token) throw new Error("Authentication required.");
+          const url = process.env.NEXT_PUBLIC_CONVEX_URL;
+          if (!url) throw new Error("Backend unavailable.");
+          const id = await new ConvexHttpClient(url).action(
+            api.mcp.discoveryWrite,
+            { token, command: args.command },
+          );
+          return {
+            structuredContent: { id },
+            content: [{ type: "text", text: JSON.stringify({ id }) }],
+          };
+        } catch (error) {
+          return mcpError(error, args.command.kind);
+        }
+      },
+    );
     server.registerTool(
       "start_research",
       {

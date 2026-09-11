@@ -104,15 +104,48 @@ export async function readWorkflow(
       };
     case "project": {
       const project = await projectFor(ctx, actor.subject, command.projectId);
-      return {
-        kind: "project" as const,
-        project,
-        topics: await ctx.db
-          .query("topics")
-          .withIndex("by_project", (q) => q.eq("projectId", project._id))
-          .order("desc")
-          .take(100),
-      };
+      const topics = await ctx.db
+        .query("topics")
+        .withIndex("by_project", (q) => q.eq("projectId", project._id))
+        .order("desc")
+        .take(100);
+      const topicStates = await Promise.all(
+        topics.map(async (topic) => {
+          const [research, run, investigation] = await Promise.all([
+            latestResearch(ctx, topic._id),
+            ctx.db
+              .query("researchRuns")
+              .withIndex("by_topic", (q) => q.eq("topicId", topic._id))
+              .order("desc")
+              .first(),
+            ctx.db
+              .query("investigations")
+              .withIndex("by_topic", (q) => q.eq("topicId", topic._id))
+              .order("desc")
+              .first(),
+          ]);
+          const status = run?.occupied
+            ? "Gathering sources"
+            : investigation?.state.kind === "provider" && run?.packetId
+              ? "Waiting for agent"
+              : investigation?.state.kind === "closed" &&
+                  investigation.state.outcome === "no_material_update"
+                ? "No material update"
+                : research
+                  ? research.review.kind === "approved"
+                    ? "Research approved"
+                    : research.review.kind === "changes_requested"
+                      ? "Changes requested"
+                      : "Ready for review"
+                  : run?.packetId
+                    ? "Waiting for agent"
+                    : run?.state.kind === "failed"
+                      ? "Research needs attention"
+                      : "Not researched";
+          return { topicId: topic._id, status };
+        }),
+      );
+      return { kind: "project" as const, project, topics, topicStates };
     }
     case "topic": {
       const topic = await topicFor(ctx, actor.subject, command.topicId);
@@ -128,6 +161,14 @@ export async function readWorkflow(
           .order("desc")
           .take(10),
       ]);
+      const scriptSourceId = scripts[0]?.researchVersionId;
+      if (
+        scriptSourceId &&
+        !research.some((row) => row._id === scriptSourceId)
+      ) {
+        const source = await ctx.db.get(scriptSourceId);
+        if (source?.topicId === topic._id) research.push(source);
+      }
       const [draft, runs, sources] = await Promise.all([
         latestDraft(ctx, topic._id),
         ctx.db

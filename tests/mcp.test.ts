@@ -261,3 +261,51 @@ it("allows reading the end of a long source and rejects invalid evidence offsets
     ).rejects.toThrow("offset");
   }
 });
+
+it("extends verified MCP ownership to discovery and brief operations without allowing approval", async () => {
+  const t = convexTest(schema, modules);
+  const created = await t.action(api.mcp.write, {
+    token: "owner-fixture",
+    command: { kind: "create_project", name: "Discovery MCP" },
+  });
+  const topic = await t.action(api.mcp.write, {
+    token: "owner-fixture",
+    command: {
+      kind: "create_topic",
+      projectId: created.id,
+      requestKey: "mcp-discovery-topic",
+      title: "One video",
+      question: "What changed?",
+    },
+  });
+  await t.action(api.mcp.discoveryWrite, {
+    token: "owner-fixture",
+    command: {
+      kind: "save_brief",
+      topicId: topic.id,
+      title: "One video",
+      question: "What changed?",
+      angle: "A comparison",
+      coverage: "Costs",
+      status: "active",
+      frequency: { kind: "once" },
+    },
+  });
+  const data = await t.action(api.mcp.discoveryRead, {
+    token: "owner-fixture",
+    projectId: created.id,
+  });
+  expect(data.config.cadence).toBe("manual");
+  await expect(
+    t.action(api.mcp.discoveryRead, {
+      token: "other-fixture",
+      projectId: created.id,
+    }),
+  ).rejects.toThrow("not found");
+  await expect(
+    t.action(api.mcp.discoveryRead, {
+      token: "revoked-fixture",
+      projectId: created.id,
+    }),
+  ).rejects.toThrow("Unauthenticated");
+});

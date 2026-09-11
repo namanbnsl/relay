@@ -12,7 +12,7 @@ import type { sourceResult } from "../convex/model/draftContracts";
 import type { readResult } from "../convex/model/validators";
 
 export const researchInstructions =
-  "When asked to research and save, continue through topic selection or creation, search, retrieval, evidence inspection, synthesis and save_research without routine permission questions. Ask only when ambiguity materially changes the investigation. Interpret current/latest relative to today's date; do not silently narrow to old years. Use focused provider tasks where helpful, read the actual evidence, challenge important provider claims with primary sources and resolve material gaps. Write coherent research with atomic cited findings. Search snippets and provider reports are leads, not inspected evidence. Never fabricate excerpts or discard citations to bypass an error. Save automatically and return a short summary and link saying Research is ready for your review. Human approval is separate and applies to the exact saved version. While work runs, use bounded waiting and respect retryAfterSeconds; clients are not guaranteed to resume after disconnect.";
+  "A topic is one potential video, not a broad interest folder. Use get_discovery to find pending daily investigations. Monitoring candidates are discovery inputs, not research evidence. Daily provider work still requires connected-agent synthesis and finish_investigation. When asked to research and save, continue through topic selection or creation, search, retrieval, evidence inspection, synthesis and save_research without routine permission questions. Ask only when ambiguity materially changes the investigation. Interpret current/latest relative to today's date; do not silently narrow to old years. Use focused provider tasks where helpful, read the actual evidence, challenge important provider claims with primary sources and resolve material gaps. Write coherent research with atomic cited findings. Search snippets and provider reports are leads, not inspected evidence. Never fabricate excerpts or discard citations to bypass an error. Save automatically and return a short summary and link saying Research is ready for your review. Human approval is separate and applies to the exact saved version. While work runs, use bounded waiting and respect retryAfterSeconds; clients are not guaranteed to resume after disconnect.";
 
 type Run = Infer<typeof publicRunResult>;
 type CurrentResearchResult = Infer<typeof researchReadResult>;
@@ -164,6 +164,8 @@ export function compactTopic(result: Infer<typeof readResult>) {
         id: t._id,
         title: t.title,
         question: t.question,
+        frequency: t.frequency ?? { kind: "once" },
+        status: t.status ?? "active",
       })),
       nextAction:
         "Read the matching topic or create one, then continue the requested research.",
@@ -175,6 +177,10 @@ export function compactTopic(result: Infer<typeof readResult>) {
       projectId: result.topic.projectId,
       title: result.topic.title,
       question: result.topic.question,
+      angle: result.topic.angle ?? "",
+      coverage: result.topic.coverage ?? "",
+      frequency: result.topic.frequency ?? { kind: "once" },
+      parentTopicId: result.topic.parentTopicId,
     },
     research: current
       ? {

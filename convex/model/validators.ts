@@ -1,3 +1,4 @@
+import { discoveryConfig, frequency } from "./discoveryContracts";
 import { v } from "convex/values";
 import {
   draftDoc,
@@ -42,10 +43,20 @@ export const claim = v.object({
 });
 export const scene = v.object({ narration: v.string(), visual: v.string() });
 export const projectFields = {
+  discovery: v.optional(discoveryConfig),
   owner: v.string(),
   name: v.string(),
 };
 export const topicFields = {
+  angle: v.optional(v.string()),
+  coverage: v.optional(v.string()),
+  status: v.optional(
+    v.union(v.literal("active"), v.literal("completed"), v.literal("archived")),
+  ),
+  frequency: v.optional(frequency),
+  scheduleGeneration: v.optional(v.number()),
+  nextResearchAt: v.optional(v.number()),
+  parentTopicId: v.optional(v.id("topics")),
   projectId: v.id("projects"),
   title: v.string(),
   question: v.string(),
@@ -148,6 +159,9 @@ export const readResult = v.union(
     kind: v.literal("project"),
     project: projectDoc,
     topics: v.array(topicDoc),
+    topicStates: v.optional(
+      v.array(v.object({ topicId: v.id("topics"), status: v.string() })),
+    ),
   }),
   v.object({
     kind: v.literal("topic"),

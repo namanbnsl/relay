@@ -25,3 +25,16 @@ export const execute = workflow
     });
     return null;
   });
+
+// Monitoring uses the same journaled infrastructure. Mutating provider requests
+// are never automatically retried; collection is read-only and delivery receipts
+// make replay safe.
+export const monitor = workflow
+  .define({ args: { monitorId: v.id("monitors") }, returns: v.null() })
+  .handler(async (step, args): Promise<null> => {
+    await step.runAction(internal.monitorActions.sync, args, { retry: false });
+    await step.runAction(internal.monitorActions.collect, args, {
+      retry: false,
+    });
+    return null;
+  });
