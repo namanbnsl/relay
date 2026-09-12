@@ -37,6 +37,33 @@ const update = {
   updatedAt: 1789120900000,
   dismissed: false,
 };
+const reviewResearch = {
+  _id: "research_fixture",
+  _creationTime: 1789120000000,
+  topicId: topic._id,
+  draftRevision: 2,
+  summary:
+    "The cost comparison depends on workload, privacy needs, and the real effort of running a model.",
+  findings: [
+    {
+      id: "finding_fixture",
+      revision: 2,
+      text: "Published benchmark results do not cover every everyday workflow.",
+      assessment: "uncertain",
+      note: "Independent workflow tests are still needed.",
+      evidenceIds: [],
+    },
+  ],
+  claims: [
+    {
+      text: "Published benchmark results do not cover every everyday workflow.",
+      assessment: "uncertain",
+      note: "Independent workflow tests are still needed.",
+      evidence: [],
+    },
+  ],
+  review: { kind: "pending" },
+};
 let state = {
   config: {
     brief:
@@ -113,7 +140,7 @@ export function useQuery(reference, args) {
     return {
       kind: "topic",
       topic: topics.find((t) => t._id === args.command.topicId) ?? topic,
-      research: [],
+      research: mode === "review" ? [reviewResearch] : [],
       scripts: [],
       draft: null,
     };

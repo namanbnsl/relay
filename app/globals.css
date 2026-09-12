@@ -401,6 +401,8 @@
 @media (max-width: 760px) {
   .workspace-shell {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    align-content: start;
   }
   .workspace-sidebar {
     position: static;
@@ -421,12 +423,12 @@
   .workspace-sidebar:has(details[open]) {
     align-items: flex-start;
   }
-  .workspace-sidebar > div:last-child {
+  .workspace-account {
     border: 0;
     padding: 0;
     margin: 0;
   }
-  .workspace-sidebar > div:last-child span {
+  .workspace-account-label {
     display: none;
   }
   .workspace-sidebar .workspace-brand > span:last-child {
@@ -477,6 +479,10 @@
   overflow-y: auto;
   min-height: 0;
 }
+.workspace-account button {
+  min-width: 32px;
+  min-height: 32px;
+}
 .workspace-nav-item[aria-current] {
   color: var(--primary);
   background: var(--sidebar-accent);
@@ -515,6 +521,9 @@
   min-height: 40px;
   background: var(--card);
 }
+.workspace-checkbox {
+  min-height: 40px;
+}
 .workspace-empty {
   margin-top: 20px;
 }
@@ -532,6 +541,11 @@
   }
   [data-slot="button"][aria-label] {
     min-width: 44px;
+  }
+  .workspace-account button,
+  .workspace-checkbox {
+    min-width: 44px;
+    min-height: 44px;
   }
 }
 @media (max-width: 760px) {

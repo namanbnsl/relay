@@ -100,7 +100,11 @@ export function ProjectFrame({
             Menu
           </summary>
           <div className="absolute end-0 top-12 z-40 w-56 rounded-lg border border-border bg-background p-2 shadow-lg">
-            <Link href="/projects" className="workspace-nav-item">
+            <Link
+              href="/projects"
+              className="workspace-nav-item"
+              aria-current={pathname === "/projects" ? "page" : undefined}
+            >
               All workspaces
             </Link>
             {projects?.kind === "projects"
@@ -108,6 +112,11 @@ export function ProjectFrame({
                   <Link
                     key={project._id}
                     href={`/projects/${project._id}`}
+                    aria-current={
+                      pathname === `/projects/${project._id}`
+                        ? "page"
+                        : undefined
+                    }
                     className="workspace-nav-item"
                   >
                     {project.name}
@@ -116,16 +125,19 @@ export function ProjectFrame({
               : null}
           </div>
         </details>
-        <div className="mt-auto flex items-center gap-3 pt-4">
+        <div className="workspace-account mt-auto flex items-center gap-3 pt-4">
           <UserButton />
-          <span className="text-xs text-muted-foreground">
+          <span className="workspace-account-label text-xs text-muted-foreground">
             Personal workspace
           </span>
         </div>
       </aside>
       <div className="min-w-0">
         <header className="workspace-topbar">
-          <Link href="/projects" className="text-muted-foreground">
+          <Link
+            href="/projects"
+            className="shrink-0 text-muted-foreground"
+          >
             Workspaces
           </Link>
           {title !== "Workspaces" ? (
@@ -135,7 +147,7 @@ export function ProjectFrame({
                 className="text-muted-foreground"
                 aria-hidden
               />
-              <span className="truncate" title={title}>
+              <span className="min-w-0 truncate" title={title}>
                 {title}
               </span>
             </>

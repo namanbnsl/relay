@@ -40,6 +40,9 @@ try {
       ),
     );
     await page.getByRole("button", { name: "Schedule", exact: true }).click();
+    await page.waitForFunction(
+      () => document.activeElement?.labels?.[0]?.textContent === "Check for updates",
+    );
     await page.getByLabel("Check for updates").selectOption("daily");
     await page.getByLabel("Start time").fill("18:30");
     await page.getByLabel("Timezone").selectOption("Asia/Kolkata");
@@ -132,6 +135,16 @@ try {
     await page
       .getByRole("heading", { name: "Ready for a little discovery" })
       .waitFor();
+    await page.goto(base + "?topic=topic_fixture&state=review");
+    await page.getByText("Approval needs attention").waitFor();
+    assert(
+      await page.getByRole("button", { name: "Approve" }).isDisabled(),
+      "Unsupported research must not be approvable",
+    );
+    await page
+      .getByText("Finding 1: uncertain and no attached source.")
+      .waitFor();
+    await fits();
     await page.goto(base + "?view=discover&state=error");
     await page.getByRole("button", { name: "Schedule", exact: true }).click();
     await page.getByLabel("Check for updates").selectOption("daily");

@@ -32,11 +32,8 @@ import {
   Plus,
 } from "lucide-react";
 import {
-  cloneElement,
-  useId,
   useRef,
   useState,
-  type ReactElement,
   type ReactNode,
 } from "react";
 import { api } from "@/convex/_generated/api";
@@ -46,6 +43,9 @@ import { Input } from "@/components/ui/input";
 import { SearchInput } from "@/components/ui/search-input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast-manager";
+import { Field } from "./workspace-field";
+import { createRequestKey } from "./workspace-request-key";
+import { formatUtcDate } from "./workspace-time";
 import { workspaceSelectClass, WorkspaceHeading } from "./workspace-ui";
 import {
   AgentPrompt,
@@ -100,22 +100,6 @@ export function useRelayWrite() {
   }
   return { write, pending, error };
 }
-export function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactElement<{ id?: string }>;
-}) {
-  const generatedId = useId();
-  const id = children.props.id ?? generatedId;
-  return (
-    <div className="grid gap-2 text-sm">
-      <label htmlFor={id}>{label}</label>
-      {cloneElement(children, { id })}
-    </div>
-  );
-}
 export function ErrorMessage({ error }: { error: string }) {
   return error ? (
     <p
@@ -156,11 +140,7 @@ export function Projects() {
                 <h2 className="font-medium break-words">{project.name}</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Created{" "}
-                  {new Date(project._creationTime).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    timeZone: "UTC",
-                  })}
+                  {formatUtcDate(project._creationTime)}
                 </p>
               </div>
               <ChevronRight
@@ -408,7 +388,7 @@ export function Project({ projectId }: { projectId: string }) {
                 const values = new FormData(event.currentTarget);
                 const result = await write({
                   kind: "create_topic",
-                  requestKey: (topicRequest.current ??= crypto.randomUUID()),
+                  requestKey: (topicRequest.current ??= createRequestKey()),
                   projectId,
                   title: String(values.get("title") ?? ""),
                   question: String(values.get("question") ?? ""),
@@ -448,8 +428,8 @@ export function Project({ projectId }: { projectId: string }) {
             </form>
             <ErrorMessage error={error} />
           </WorkspaceDialog>
-          <div className="mb-2 flex items-center justify-between gap-4">
-            <h2 className="text-sm font-medium">
+          <div className="workspace-topic-toolbar mb-2 flex items-center justify-between gap-4">
+            <h2 className="shrink-0 text-sm font-medium">
               Topics{" "}
               <span className="ms-2 text-xs text-muted-foreground">
                 {data.topics.length}
@@ -692,7 +672,7 @@ function TopicDocument({
             description="Ask your connected agent to investigate this question. Review the findings here when they’re ready."
           >
             <AgentPrompt
-              prompt={`Research the Relay topic “${data.topic.title}” (topic ID ${data.topic._id}) in project ${data.topic.projectId}. Investigate: ${data.topic.question} Read supporting sources, resolve important gaps, and save the completed research in Relay for my review. Continue through research and saving without asking me to manage intermediate steps.`}
+              prompt={`Research the Relay topic “${data.topic.title}” (topic ID ${data.topic._id}) in project ${data.topic.projectId}. Investigate: ${data.topic.question} Break the question into useful subtopics, read supporting sources, resolve important gaps, and cross-check material claims with an independent model. Record uncertainty and verification honestly, then save the completed research in Relay for my review. Continue through research and saving without asking me to manage intermediate steps.`}
             />
           </EmptyDocument>
         )
@@ -713,7 +693,7 @@ function TopicDocument({
         >
           {latest?.review.kind === "approved" ? (
             <AgentPrompt
-              prompt={`Read the current approved research for the Relay topic “${data.topic.title}”. Write and save a video script with narration and a visual plan for each scene. Stop for my review.`}
+              prompt={`Read the current approved research for the Relay topic “${data.topic.title}”. Write and save a video script with a clear title, hook, ordered scenes, narration, and a concrete visual plan for each scene. Use charts, sourced data, or real assets where the evidence supports them. Stop for my review.`}
             />
           ) : (
             <Button variant="outline" onClick={onViewResearch}>
@@ -732,6 +712,12 @@ function sceneKey(scene: { narration: string; visual: string }) {
 function sourceKey(source: unknown) {
   return JSON.stringify(source);
 }
+function fixedRows<T>(prefix: string, values: T[]) {
+  return values.map((value, index) => ({
+    key: `${prefix}:${index}`,
+    value,
+  }));
+}
 function reviewLabel(review: Doc<"researchVersions">["review"]) {
   switch (review.kind) {
     case "approved":
@@ -742,20 +728,31 @@ function reviewLabel(review: Doc<"researchVersions">["review"]) {
       return "Ready for review";
   }
 }
+function approvalBlockers(row: Doc<"researchVersions">) {
+  return row.claims.flatMap((claim, index) => {
+    const reasons: string[] = [];
+    if (claim.assessment !== "supported") reasons.push(claim.assessment);
+    if (claim.evidence.length === 0) reasons.push("no attached source");
+    return reasons.length
+      ? [`Finding ${index + 1}: ${reasons.join(" and ")}.`]
+      : [];
+  });
+}
 function Review({
   row,
   kind,
-  blocked = false,
+  blockers = [],
   compact = false,
 }: {
   row: Doc<"researchVersions"> | Doc<"scriptVersions">;
   kind: "research" | "script";
-  blocked?: boolean;
+  blockers?: string[];
   compact?: boolean;
 }) {
   const { write, pending, error } = useRelayWrite();
   const [note, setNote] = useState("");
   const [requesting, setRequesting] = useState(false);
+  const blockerId = `approval-blockers-${row._id}`;
   return (
     <div className={`workspace-review ${compact ? "!mt-0 mb-7" : ""}`}>
       <div className="flex items-center gap-2 text-sm font-medium">
@@ -771,11 +768,31 @@ function Review({
       {row.review.kind === "changes_requested" ? (
         <p className="mb-4 text-sm">{row.review.note}</p>
       ) : null}
+      {row.review.kind === "pending" && blockers.length ? (
+        <div
+          id={blockerId}
+          role="status"
+          className="w-full rounded-lg bg-surface-subtle p-4 text-sm leading-6"
+        >
+          <p className="font-medium">Approval needs attention</p>
+          <p className="mt-1 text-muted-foreground">
+            {kind === "research"
+              ? "Every finding must be supported and have at least one source."
+              : "The script must use the current approved research."}
+          </p>
+          <ul className="mt-2 list-disc space-y-1 ps-5 text-muted-foreground">
+            {blockers.map((blocker) => (
+              <li key={blocker}>{blocker}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {row.review.kind !== "approved" &&
       row.review.kind !== "changes_requested" ? (
         <div className="flex flex-wrap gap-2">
           <Button
-            disabled={pending || blocked}
+            aria-describedby={blockers.length ? blockerId : undefined}
+            disabled={pending || blockers.length > 0}
             onClick={() =>
               write({
                 kind: kind === "research" ? "review_research" : "review_script",
@@ -859,8 +876,17 @@ function Research({
   const { write, pending, error } = useRelayWrite();
   const [editing, setEditing] = useState(false);
   const [summary, setSummary] = useState(row.summary);
-  const [claims, setClaims] = useState(row.claims);
+  const [editableClaims, setEditableClaims] = useState(() =>
+    fixedRows(`${row._id}:claim`, row.claims),
+  );
   const [baseId, setBaseId] = useState(row._id);
+  const blockers = approvalBlockers(row);
+  const documentClaims = row.claims.map((claim, index) => ({
+    claim,
+    verification: row.findings?.[index]?.verification,
+    key: row.findings?.[index]?.id ?? sourceKey(claim),
+  }));
+  const claims = editableClaims.map(({ value }) => value);
   useDraftProtection(
     editing &&
       (summary !== row.summary ||
@@ -891,7 +917,7 @@ function Research({
             onClick={() => {
               setSummary(row.summary);
               setBaseId(row._id);
-              setClaims(row.claims);
+              setEditableClaims(fixedRows(`${row._id}:claim`, row.claims));
               setEditing(true);
             }}
           >
@@ -905,10 +931,7 @@ function Research({
           row={row}
           kind="research"
           compact
-          blocked={row.claims.some(
-            (claim) =>
-              claim.assessment !== "supported" || claim.evidence.length === 0,
-          )}
+          blockers={blockers}
         />
       ) : null}
       {editing ? (
@@ -945,8 +968,8 @@ function Research({
               maxLength={20000}
             />
           </Field>
-          {claims.map((claim, index) => (
-            <div key={index} className="grid gap-4 border-t border-border pt-5">
+          {editableClaims.map(({ key, value: claim }, index) => (
+            <div key={key} className="grid gap-4 border-t border-border pt-5">
               <Field label={`Finding ${index + 1}`}>
                 <Textarea
                   disabled={pending}
@@ -954,9 +977,14 @@ function Research({
                   required
                   maxLength={4000}
                   onChange={(e) =>
-                    setClaims(
-                      claims.map((item, i) =>
-                        i === index ? { ...item, text: e.target.value } : item,
+                    setEditableClaims(
+                      editableClaims.map((item, i) =>
+                        i === index
+                          ? {
+                              ...item,
+                              value: { ...item.value, text: e.target.value },
+                            }
+                          : item,
                       ),
                     )
                   }
@@ -974,9 +1002,14 @@ function Research({
                       value === "disputed" ||
                       value === "uncertain"
                     )
-                      setClaims(
-                        claims.map((item, i) =>
-                          i === index ? { ...item, assessment: value } : item,
+                      setEditableClaims(
+                        editableClaims.map((item, i) =>
+                          i === index
+                            ? {
+                                ...item,
+                                value: { ...item.value, assessment: value },
+                              }
+                            : item,
                         ),
                       );
                   }}
@@ -992,9 +1025,14 @@ function Research({
                   value={claim.note}
                   maxLength={4000}
                   onChange={(e) =>
-                    setClaims(
-                      claims.map((item, i) =>
-                        i === index ? { ...item, note: e.target.value } : item,
+                    setEditableClaims(
+                      editableClaims.map((item, i) =>
+                        i === index
+                          ? {
+                              ...item,
+                              value: { ...item.value, note: e.target.value },
+                            }
+                          : item,
                       ),
                     )
                   }
@@ -1037,8 +1075,8 @@ function Research({
             {row.summary}
           </p>
           <div className="mt-8 space-y-6">
-            {row.claims.map((claim, index) => (
-              <article key={index}>
+            {documentClaims.map(({ claim, key, verification }, index) => (
+              <article key={key}>
                 <p className="whitespace-pre-wrap text-[15px] leading-7">
                   {claim.text}{" "}
                   {claim.evidence.map((source, sourceIndex) => (
@@ -1062,6 +1100,11 @@ function Research({
                     {claim.note ? ` · ${claim.note}` : ""}
                   </p>
                 ) : null}
+                {verification ? (
+                  <p className="mt-2 text-xs leading-6 text-muted-foreground">
+                    Cross-checked by {verification.model} · {verification.verdict}
+                  </p>
+                ) : null}
               </article>
             ))}
           </div>
@@ -1069,8 +1112,8 @@ function Research({
             <summary className="min-h-9 cursor-pointer text-sm font-medium">
               Sources
             </summary>
-            {row.claims.map((claim, index) => (
-              <div key={index} className="mt-5 space-y-4">
+            {documentClaims.map(({ claim, key }, index) => (
+              <div key={key} className="mt-5 space-y-4">
                 {!claim.evidence.length ? (
                   <p className="text-sm text-muted-foreground">
                     Finding {index + 1} has no attached sources.
@@ -1105,16 +1148,6 @@ function Research({
           {readOnly && row.review.kind === "changes_requested" ? (
             <p className="mt-4 text-sm">{row.review.note}</p>
           ) : null}
-          {!readOnly &&
-          row.claims.some(
-            (claim) =>
-              claim.assessment !== "supported" || claim.evidence.length === 0,
-          ) ? (
-            <p className="mt-6 text-sm text-muted-foreground">
-              Some findings need supporting evidence. Edit the research or
-              request changes before approving.
-            </p>
-          ) : null}
         </>
       )}
     </section>
@@ -1130,9 +1163,12 @@ function ScriptDocument({
   const { write, pending, error } = useRelayWrite();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(row.title);
-  const [scenes, setScenes] = useState(row.scenes);
+  const [editableScenes, setEditableScenes] = useState(() =>
+    fixedRows(`${row._id}:scene`, row.scenes),
+  );
   const [baseId, setBaseId] = useState(row._id);
   const [showVisuals, setShowVisuals] = useState(false);
+  const scenes = editableScenes.map(({ value }) => value);
   useDraftProtection(
     editing &&
       (title !== row.title ||
@@ -1149,7 +1185,7 @@ function ScriptDocument({
         {source?.draftRevision
           ? `revision ${source.draftRevision}`
           : source
-            ? `saved ${new Date(source._creationTime).toLocaleDateString()}`
+            ? `saved ${formatUtcDate(source._creationTime)}`
             : row.researchVersionId}
         . Approval remains attached to that exact version.
       </p>
@@ -1178,7 +1214,7 @@ function ScriptDocument({
               onClick={() => {
                 setTitle(row.title);
                 setBaseId(row._id);
-                setScenes(row.scenes);
+                setEditableScenes(fixedRows(`${row._id}:scene`, row.scenes));
                 setEditing(true);
               }}
             >
@@ -1193,11 +1229,7 @@ function ScriptDocument({
           This script uses older research. Ask your agent to revise it against
           the current approved version.
         </p>
-      ) : (
-        <p className="mb-6 text-xs text-muted-foreground">
-          Based on approved research
-        </p>
-      )}
+      ) : null}
       {editing ? (
         <form
           className="grid gap-5"
@@ -1221,8 +1253,8 @@ function ScriptDocument({
               onChange={(e) => setTitle(e.target.value)}
             />
           </Field>
-          {scenes.map((scene, index) => (
-            <div key={index} className="grid gap-4 border-t border-border pt-5">
+          {editableScenes.map(({ key, value: scene }, index) => (
+            <div key={key} className="grid gap-4 border-t border-border pt-5">
               <Field label={`Scene ${index + 1} narration`}>
                 <Textarea
                   disabled={pending}
@@ -1230,10 +1262,16 @@ function ScriptDocument({
                   value={scene.narration}
                   maxLength={10000}
                   onChange={(e) =>
-                    setScenes(
-                      scenes.map((item, i) =>
+                    setEditableScenes(
+                      editableScenes.map((item, i) =>
                         i === index
-                          ? { ...item, narration: e.target.value }
+                          ? {
+                              ...item,
+                              value: {
+                                ...item.value,
+                                narration: e.target.value,
+                              },
+                            }
                           : item,
                       ),
                     )
@@ -1247,10 +1285,13 @@ function ScriptDocument({
                   value={scene.visual}
                   maxLength={10000}
                   onChange={(e) =>
-                    setScenes(
-                      scenes.map((item, i) =>
+                    setEditableScenes(
+                      editableScenes.map((item, i) =>
                         i === index
-                          ? { ...item, visual: e.target.value }
+                          ? {
+                              ...item,
+                              value: { ...item.value, visual: e.target.value },
+                            }
                           : item,
                       ),
                     )
@@ -1298,7 +1339,13 @@ function ScriptDocument({
               ) : null}
             </article>
           ))}
-          <Review row={row} kind="script" blocked={outdated} />
+          <Review
+            row={row}
+            kind="script"
+            blockers={
+              outdated ? ["This script is based on older research."] : []
+            }
+          />
         </>
       )}
     </section>

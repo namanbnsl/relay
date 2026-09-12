@@ -77,6 +77,7 @@ export function WorkspaceDialog({
   returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const returnFocus = useRef<HTMLElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   return (
     <Dialog
       open={open}
@@ -92,14 +93,13 @@ export function WorkspaceDialog({
     >
       <DialogTrigger render={trigger} />
       <DialogContent
+        ref={contentRef}
         showCloseButton={false}
         className="workspace-dialog research-workspace"
         initialFocus={() =>
-          [
-            ...document.querySelectorAll<HTMLElement>(
-              ".workspace-dialog input, .workspace-dialog select, .workspace-dialog textarea",
-            ),
-          ].find((element) => element.getClientRects().length > 0) ?? null
+          contentRef.current?.querySelector<HTMLElement>(
+            "input:not(:disabled), select:not(:disabled), textarea:not(:disabled)",
+          ) ?? null
         }
         finalFocus={() =>
           returnFocusRef?.current?.isConnected

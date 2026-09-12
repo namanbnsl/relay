@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
@@ -15,12 +15,18 @@ import {
   Plus,
   Radio,
 } from "lucide-react";
-import { Field, value, useCommand } from "./workspace-actions";
+import { useCommand } from "./workspace-actions";
+import { Field } from "./workspace-field";
+import { formValue } from "./workspace-form";
+import { createRequestKey } from "./workspace-request-key";
 import {
   ResearchSchedule,
   TimezoneField,
-  formatScheduleTime,
 } from "./research-schedule";
+import {
+  formatScheduleTime,
+  formatUtcDateTime,
+} from "./workspace-time";
 import { workspaceSelectClass } from "./workspace-ui";
 import {
   AgentPrompt,
@@ -30,14 +36,7 @@ import {
 } from "./workspace-interactions";
 
 function stamp(at?: number) {
-  return at === undefined
-    ? "Not checked yet"
-    : new Date(at).toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      });
+  return at === undefined ? "Not checked yet" : formatUtcDateTime(at);
 }
 export function WorkspaceNavigation({
   projectId,
@@ -85,10 +84,16 @@ export function Discover({
   if (!data) return <DocumentLoading />;
   const updates = data.updates.filter((u) => showDismissed || !u.dismissed);
   const sources = data.monitors.filter((m) => !m.removed);
-  const next = sources
-    .filter((m) => !m.paused && m.nextCheck)
-    .map((m) => m.nextCheck ?? Infinity)
-    .sort((a, b) => a - b)[0];
+  let next: number | undefined;
+  for (const source of sources) {
+    if (
+      !source.paused &&
+      source.nextCheck !== undefined &&
+      (next === undefined || source.nextCheck < next)
+    ) {
+      next = source.nextCheck;
+    }
+  }
   return (
     <div>
       <div className="workspace-heading-row">
@@ -142,9 +147,10 @@ export function Discover({
         {view === "sources" ? (
           <MonitorEditor projectId={projectId} />
         ) : (
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <label className="workspace-checkbox flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
+              className="size-4 shrink-0 accent-foreground"
               checked={showDismissed}
               onChange={(e) => setShowDismissed(e.target.checked)}
             />
@@ -253,21 +259,22 @@ function DiscoverySettingsForm({
           kind: "configure_discovery",
           projectId,
           config: {
-            brief: value(data, "brief"),
-            region: value(data, "region"),
-            language: value(data, "language"),
-            scope: value(data, "scope") === "websites" ? "websites" : "web",
+            brief: formValue(data, "brief"),
+            region: formValue(data, "region"),
+            language: formValue(data, "language"),
+            scope:
+              formValue(data, "scope") === "websites" ? "websites" : "web",
             cadence: daily ? "daily" : "manual",
             ...(daily
               ? {
                   schedule: {
-                    time: value(data, "time"),
-                    timezone: value(data, "timezone"),
+                    time: formValue(data, "time"),
+                    timezone: formValue(data, "timezone"),
                   },
                 }
               : {}),
             candidates:
-              value(data, "candidates") === "automatic"
+              formValue(data, "candidates") === "automatic"
                 ? "automatic"
                 : "suggest",
           },
@@ -403,7 +410,7 @@ function MonitorForm({
   onSaved: () => void;
 }) {
   const action = useCommand();
-  const key = useRef(crypto.randomUUID());
+  const [requestKey] = useState(createRequestKey);
   return (
     <form
       className="grid gap-5"
@@ -413,11 +420,11 @@ function MonitorForm({
         const saved = await action.run({
           kind: "save_monitor",
           projectId,
-          requestKey: key.current,
+          requestKey,
           ...(monitor ? { monitorId: monitor._id } : {}),
-          name: value(data, "name"),
-          query: value(data, "query"),
-          domains: value(data, "domains")
+          name: formValue(data, "name"),
+          query: formValue(data, "query"),
+          domains: formValue(data, "domains")
             .split(/[\s,]+/)
             .filter(Boolean),
           paused: monitor?.paused ?? false,
@@ -468,7 +475,7 @@ function MonitorRow({
   available: boolean;
 }) {
   const action = useCommand();
-  const checkKey = useRef(crypto.randomUUID());
+  const [checkKey] = useState(createRequestKey);
   return (
     <article className="workspace-source-row">
       <Radio size={18} className="mt-1 text-muted-foreground" aria-hidden />
@@ -512,7 +519,7 @@ function MonitorRow({
                 kind: "monitor_action",
                 monitorId: m._id,
                 action: "check",
-                requestKey: `${checkKey.current}:${m.lastCheck ?? 0}`,
+                requestKey: `${checkKey}:${m.lastCheck ?? 0}`,
               });
             }}
           >
@@ -643,7 +650,7 @@ function UpdateCard({
             const id = await action.run({
               kind: "attach_update",
               updateId: u._id,
-              topicId: value(data, "topic"),
+              topicId: formValue(data, "topic"),
             });
             if (id) setAttaching(false);
           }}
@@ -731,7 +738,7 @@ export function TopicBrief({
         <div className="mt-5 flex flex-wrap gap-2">
           <AgentPrompt
             label="Research with my agent"
-            prompt={`Research the Relay topic “${t.title}” (topic ID ${t._id}) in project ${t.projectId}. Investigate: ${t.question}. Develop the angle and coverage, read supporting sources, and save the completed research in Relay for my review. Manage the intermediate steps yourself.`}
+            prompt={`Research the Relay topic “${t.title}” (topic ID ${t._id}) in project ${t.projectId}. Investigate: ${t.question}. Break the question into useful subtopics, develop the angle and coverage, read supporting sources, and cross-check material claims with an independent model. Record uncertainty and verification honestly, then save the completed research in Relay for my review. Manage the intermediate steps yourself.`}
           />
           {onResearch ? (
             <Button variant="ghost" onClick={onResearch}>
@@ -806,14 +813,14 @@ function BriefEditor({
         const saved = await action.run({
           kind: "save_brief",
           topicId: t._id,
-          title: value(data, "title"),
-          question: value(data, "question"),
-          angle: value(data, "angle"),
-          coverage: value(data, "coverage"),
+          title: formValue(data, "title"),
+          question: formValue(data, "question"),
+          angle: formValue(data, "angle"),
+          coverage: formValue(data, "coverage"),
           status:
-            value(data, "status") === "archived"
+            formValue(data, "status") === "archived"
               ? "archived"
-              : value(data, "status") === "completed"
+              : formValue(data, "status") === "completed"
                 ? "completed"
                 : "active",
           frequency: t.frequency ?? { kind: "once" },
@@ -892,7 +899,7 @@ export function InvestigationStatus({
       {current.state.kind === "waiting_for_agent" ? (
         <div className="mt-3">
           <AgentPrompt
-            prompt={`Finish the pending research for Relay topic ${topicId}, investigation ${current._id}. Read the collected sources, investigate gaps, and save the findings in Relay. Close this investigation against the saved research, then leave it for my review. If nothing significant changed, explain why.`}
+            prompt={`Finish the pending research for Relay topic ${topicId}, investigation ${current._id}. Read the collected sources, investigate gaps, and cross-check material claims with an independent model. Record uncertainty and verification honestly, save the findings in Relay, and close this investigation against the saved research. Then leave it for my review. If nothing significant changed, explain why.`}
           />
         </div>
       ) : null}

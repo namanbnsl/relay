@@ -5,6 +5,7 @@ import { api } from "@/convex/_generated/api";
 import { ArrowUpRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Doc } from "@/convex/_generated/dataModel";
+import { formatUtcDateTime } from "./workspace-time";
 
 const runLabels = {
   queued: "Waiting to start",
@@ -164,6 +165,8 @@ function Packet({ runId }: { runId: string }) {
         Loading sources…
       </p>
     );
+  const evidenceCounts = { retrieved: 0, pending: 0, failed: 0 };
+  for (const item of data.evidence) evidenceCounts[item.outcome.kind] += 1;
   return (
     <div className="mt-5 space-y-4 border-t border-border pt-5">
       <p className="whitespace-pre-wrap text-sm">{data.run.question}</p>
@@ -172,8 +175,8 @@ function Packet({ runId }: { runId: string }) {
           <summary className="text-sm">Supplied plan</summary>
           <p className="whitespace-pre-wrap text-sm">{data.run.plan.scope}</p>
           <ul className="list-disc pl-5 text-sm">
-            {data.run.plan.subquestions.map((q, i) => (
-              <li key={i}>{q}</li>
+            {data.run.plan.subquestions.map((question) => (
+              <li key={question}>{question}</li>
             ))}
           </ul>
         </details>
@@ -190,29 +193,16 @@ function Packet({ runId }: { runId: string }) {
             <div>
               <h4 className="text-sm font-medium">Coverage gaps</h4>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                {data.packet.gaps.map((gap, i) => (
-                  <li key={i}>{gap}</li>
+                {data.packet.gaps.map((gap) => (
+                  <li key={gap}>{gap}</li>
                 ))}
               </ul>
             </div>
           ) : null}
           <h4 className="text-sm font-medium">
             Sources ·{" "}
-            {
-              data.evidence.filter((item) => item.outcome.kind === "retrieved")
-                .length
-            }{" "}
-            retrieved,{" "}
-            {
-              data.evidence.filter((item) => item.outcome.kind === "pending")
-                .length
-            }{" "}
-            pending,{" "}
-            {
-              data.evidence.filter((item) => item.outcome.kind === "failed")
-                .length
-            }{" "}
-            failed
+            {evidenceCounts.retrieved} retrieved, {evidenceCounts.pending}{" "}
+            pending, {evidenceCounts.failed} failed
           </h4>
           <p className="text-xs text-muted-foreground">
             Check each source against its finding. Saving a source does not
@@ -246,11 +236,11 @@ function Evidence({ row }: { row: Doc<"researchEvidence"> }) {
         href={row.originalUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="break-all underline underline-offset-4"
+        className="break-words underline underline-offset-4"
       >
         {row.title || row.originalUrl}
       </a>
-      <p className="mt-1 text-xs text-muted-foreground">
+      <p className="mt-1 text-xs capitalize text-muted-foreground">
         {row.outcome.kind}
         {row.publishedAt
           ? ` · Published: ${row.publishedAt}`
@@ -261,8 +251,8 @@ function Evidence({ row }: { row: Doc<"researchEvidence"> }) {
       ) : null}
       {row.outcome.kind === "retrieved" ? (
         <>
-          <p className="mt-1 break-all text-xs text-muted-foreground">
-            Retrieved {new Date(row.outcome.retrievedAt).toLocaleString()}
+          <p className="mt-1 break-words text-xs text-muted-foreground">
+            Retrieved {formatUtcDateTime(row.outcome.retrievedAt)}
           </p>
           <Button
             variant="outline"
@@ -282,7 +272,7 @@ function Evidence({ row }: { row: Doc<"researchEvidence"> }) {
       ) : null}
       {open && data?.kind === "evidence" && data.contentUrl ? (
         <a
-          className="ml-3 text-xs underline"
+          className="ms-3 text-xs underline"
           href={data.contentUrl}
           target="_blank"
           rel="noopener noreferrer"

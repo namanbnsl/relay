@@ -1,11 +1,5 @@
 "use client";
-import {
-  cloneElement,
-  useId,
-  useRef,
-  useState,
-  type ReactElement,
-} from "react";
+import { useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { ConvexError } from "convex/values";
 import type { FunctionArgs } from "convex/server";
@@ -61,23 +55,4 @@ export function useCommand() {
       </>
     ),
   };
-}
-export function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactElement<{ id?: string }>;
-}) {
-  const generatedId = useId();
-  const id = children.props.id ?? generatedId;
-  return (
-    <div className="grid min-w-0 gap-2 text-sm">
-      <label htmlFor={id}>{label}</label>
-      {cloneElement(children, { id })}
-    </div>
-  );
-}
-export function value(data: FormData, key: string) {
-  return String(data.get(key) ?? "").trim();
 }

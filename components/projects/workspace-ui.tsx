@@ -30,24 +30,3 @@ export function WorkspaceHeading({
     </div>
   );
 }
-
-export function ViewButton({
-  active,
-  children,
-  onClick,
-}: {
-  active: boolean;
-  children: ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={`relative min-h-10 min-w-6 shrink-0 border-b-2 px-0.5 text-[13px] font-medium outline-none transition-colors duration-150 focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${active ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-    >
-      {children}
-    </button>
-  );
-}

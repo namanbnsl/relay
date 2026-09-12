@@ -134,16 +134,18 @@ export const available = query({
   handler: async (ctx, { topicId }) => {
     const subject = (await requireIdentity(ctx)).subject;
     const topic = await topicFor(ctx, subject, topicId);
-    const local = await ctx.db
-      .query("workspaceEvidence")
-      .withIndex("by_topic", (q) => q.eq("topicId", topic._id))
-      .order("desc")
-      .take(100);
-    const runs = await ctx.db
-      .query("researchRuns")
-      .withIndex("by_topic", (q) => q.eq("topicId", topic._id))
-      .order("desc")
-      .take(20);
+    const [local, runs] = await Promise.all([
+      ctx.db
+        .query("workspaceEvidence")
+        .withIndex("by_topic", (q) => q.eq("topicId", topic._id))
+        .order("desc")
+        .take(100),
+      ctx.db
+        .query("researchRuns")
+        .withIndex("by_topic", (q) => q.eq("topicId", topic._id))
+        .order("desc")
+        .take(20),
+    ]);
     const remote = (
       await Promise.all(
         runs.map((run) =>

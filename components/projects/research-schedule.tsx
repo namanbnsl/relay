@@ -5,19 +5,14 @@ import type { Doc } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WorkspaceDialog } from "./workspace-interactions";
-import { Field, useCommand, value } from "./workspace-actions";
+import { useCommand } from "./workspace-actions";
+import { Field } from "./workspace-field";
+import { formValue } from "./workspace-form";
+import { formatScheduleTime } from "./workspace-time";
 import { workspaceSelectClass } from "./workspace-ui";
 
-export function formatScheduleTime(at: number, timezone?: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    ...(timezone ? { timeZone: timezone } : {}),
-    timeZoneName: "short",
-  }).format(at);
-}
+const supportedTimezones = Intl.supportedValuesOf("timeZone");
+
 export function TimezoneField({ defaultValue }: { defaultValue?: string }) {
   const local = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const zones = [
@@ -26,7 +21,7 @@ export function TimezoneField({ defaultValue }: { defaultValue?: string }) {
       local,
       "UTC",
       "Asia/Kolkata",
-      ...Intl.supportedValuesOf("timeZone"),
+      ...supportedTimezones,
     ]),
   ];
   return (
@@ -62,7 +57,10 @@ export function ResearchSchedule({ topic }: { topic: Doc<"topics"> }) {
         ? "Research paused"
         : `Research daily at ${frequency.time}`
       : topic.nextResearchAt
-        ? `Research ${formatScheduleTime(topic.nextResearchAt)}`
+        ? `Research ${formatScheduleTime(
+            topic.nextResearchAt,
+            frequency?.kind === "scheduled" ? frequency.timezone : undefined,
+          )}`
         : "Schedule research";
   return (
     <WorkspaceDialog
@@ -102,12 +100,12 @@ function ScheduleForm({
         event.preventDefault();
         setError("");
         const form = new FormData(event.currentTarget);
-        const at = new Date(value(form, "at")).getTime();
+        const at = new Date(formValue(form, "at")).getTime();
         if (
           mode === "scheduled" &&
           (!Number.isFinite(at) ||
             at <= openedAt ||
-            localDateTime(at) !== value(form, "at"))
+            localDateTime(at) !== formValue(form, "at"))
         ) {
           setError(
             "Choose a future date and time. This time may not exist when the clocks change.",
@@ -121,8 +119,8 @@ function ScheduleForm({
             mode === "daily"
               ? {
                   kind: "daily",
-                  time: value(form, "time"),
-                  timezone: value(form, "timezone"),
+                  time: formValue(form, "time"),
+                  timezone: formValue(form, "timezone"),
                   paused: false,
                 }
               : mode === "scheduled"
