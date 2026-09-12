@@ -100,13 +100,16 @@ export const claimRetrieval = internalMutation({
       .query("workspaceSourceRetrievals")
       .withIndex("by_source", (q) => q.eq("sourceId", sourceId))
       .unique();
+    if (receipt?.state.kind === "failed") {
+      await ctx.db.patch(receipt._id, {
+        state: { kind: "pending", startedAt: Date.now() },
+      });
+      return { kind: "claimed" as const };
+    }
     if (receipt)
       return {
         kind: "blocked" as const,
-        reason:
-          receipt.state.kind === "failed"
-            ? receipt.state.reason
-            : "retrieval_in_progress",
+        reason: "retrieval_in_progress",
       };
     await ctx.db.insert("workspaceSourceRetrievals", {
       sourceId,

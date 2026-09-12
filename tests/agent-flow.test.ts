@@ -734,6 +734,62 @@ it("claims source retrieval before the paid request", async () => {
   expect(source?.retrievalAttempts).toBe(1);
   expect(source?.retrievalDollars).toBe(0.001);
 });
+it("reclaims a failed source retrieval on the next read", async () => {
+  const { t, topicId } = await setup();
+  let contentsCalls = 0;
+  const mock = vi.fn(async (url: string) => {
+    if (url.endsWith("/search"))
+      return new Response(
+        JSON.stringify({
+          results: [{ url: "https://example.org/source", highlights: [] }],
+        }),
+      );
+    contentsCalls += 1;
+    if (contentsCalls === 1) throw new Error("Transient provider failure");
+    return new Response(
+      JSON.stringify({
+        results: [
+          { url: "https://example.org/source", text: "Recovered content" },
+        ],
+      }),
+    );
+  });
+  vi.stubGlobal("fetch", mock);
+  const search = await t.action(api.mcp.sources, {
+    token: "owner",
+    command: { kind: "search_sources", topicId, query: "x" },
+  });
+  if (search.kind !== "search_excerpts") throw new Error("Wrong search");
+  const sourceId = search.sources[0]._id;
+  const command = {
+    kind: "read_sources" as const,
+    topicId,
+    sourceIds: [sourceId],
+  };
+
+  const failed = await t.action(api.mcp.sources, {
+    token: "owner",
+    command,
+  });
+  expect(failed).toMatchObject({
+    kind: "retrieved_content",
+    evidence: [],
+    failures: [{ sourceId }],
+  });
+
+  const retried = await t.action(api.mcp.sources, {
+    token: "owner",
+    command,
+  });
+  expect(retried).toMatchObject({
+    kind: "retrieved_content",
+    evidence: [{ sourceId, content: "Recovered content" }],
+    failures: [],
+  });
+  expect(contentsCalls).toBe(2);
+  const source = await t.run((ctx) => ctx.db.get(sourceId));
+  expect(source?.retrievalAttempts).toBe(2);
+});
 it("records known retrieval charges on empty content, rejects malformed provider data, and honors the execution switch", async () => {
   const { t, topicId } = await setup();
   const mock = vi.fn(
