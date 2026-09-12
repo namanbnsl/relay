@@ -20,9 +20,9 @@ export const get = internalQuery({
       project,
       domains: [
         ...new Set(
-          websites
-            .filter((m) => !m.removed && !m.paused)
-            .flatMap((m) => m.domains),
+          websites.flatMap((monitor) =>
+            monitor.removed || monitor.paused ? [] : monitor.domains,
+          ),
         ),
       ],
     };
@@ -222,12 +222,16 @@ export const reconcileDue = internalMutation({
         q.gt("nextReconcileAt", 0).lte("nextReconcileAt", Date.now()),
       )
       .take(100);
-    for (const m of rows) {
-      await ctx.db.patch(m._id, { nextReconcileAt: Date.now() + 3600000 });
-      await ctx.scheduler.runAfter(0, internal.monitorState.enqueue, {
-        monitorId: m._id,
-      });
-    }
+    await Promise.all(
+      rows.map(async (monitor) => {
+        await ctx.db.patch(monitor._id, {
+          nextReconcileAt: Date.now() + 3600000,
+        });
+        await ctx.scheduler.runAfter(0, internal.monitorState.enqueue, {
+          monitorId: monitor._id,
+        });
+      }),
+    );
   },
 });
 

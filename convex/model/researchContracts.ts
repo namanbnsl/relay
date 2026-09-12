@@ -7,8 +7,7 @@ export const plan = v.object({
   scope: v.string(),
   subquestions: v.array(v.string()),
 });
-export const startInput = z
-  .object({
+export const startInput = z.strictObject({
     topicId: z.string().min(1).max(128),
     requestKey: z.string().min(8).max(128),
     question: z.string().trim().min(1).max(12000).optional(),
@@ -18,8 +17,7 @@ export const startInput = z
         subquestions: z.array(z.string().min(1).max(2000)).max(8),
       })
       .optional(),
-  })
-  .strict();
+  });
 export const writeResearchCommand = v.union(
   v.object({
     kind: v.literal("start_research"),

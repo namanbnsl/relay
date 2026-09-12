@@ -96,10 +96,8 @@ function ScheduleForm({
   return (
     <form
       className="grid gap-5"
-      onSubmit={async (event) => {
-        event.preventDefault();
+      action={async (form) => {
         setError("");
-        const form = new FormData(event.currentTarget);
         const at = new Date(formValue(form, "at")).getTime();
         if (
           mode === "scheduled" &&

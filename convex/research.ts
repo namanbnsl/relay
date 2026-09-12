@@ -62,7 +62,9 @@ export async function readOwned(
     return {
       kind: "topic_runs" as const,
       setup: settings(),
-      runs: runs.filter((run) => run.owner === subject).map(publicRun),
+      runs: runs.flatMap((run) =>
+        run.owner === subject ? [publicRun(run)] : [],
+      ),
     };
   }
   if (command.kind === "get_evidence") {
@@ -229,9 +231,9 @@ export async function writeOwned(
       .take(20);
     const updates = (
       await Promise.all(attached.map((link) => ctx.db.get(link.updateId)))
-    )
-      .filter((update) => update !== null)
-      .filter((update) => update.projectId === topic.projectId);
+    ).flatMap((update) =>
+      update?.projectId === topic.projectId ? [update] : [],
+    );
     const discoveryContext = updates
       .map(
         (update) =>
@@ -335,9 +337,13 @@ export async function writeOwned(
       .query("researchEvidence")
       .withIndex("by_run", (q) => q.eq("runId", run._id))
       .take(20);
-    for (const e of evidence)
-      if (e.outcome.kind === "failed" && e.attempts < 2)
-        await ctx.db.patch(e._id, { outcome: { kind: "pending" } });
+    await Promise.all(
+      evidence.map((item) =>
+        item.outcome.kind === "failed" && item.attempts < 2
+          ? ctx.db.patch(item._id, { outcome: { kind: "pending" } })
+          : Promise.resolve(),
+      ),
+    );
     const packet = await ctx.db.get(run.packetId);
     if (packet)
       await ctx.db.patch(packet._id, {

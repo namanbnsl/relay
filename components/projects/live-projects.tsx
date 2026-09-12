@@ -14,7 +14,7 @@ import {
   usePaginatedQuery,
 } from "convex/react";
 import { ConvexError } from "convex/values";
-import type { FunctionArgs } from "convex/server";
+import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -59,6 +59,10 @@ import { ProjectFrame } from "./project-frame";
 export { ProjectFrame } from "./project-frame";
 
 type Command = FunctionArgs<typeof api.relay.write>["command"];
+type ProjectData = Extract<
+  FunctionReturnType<typeof api.relay.read>,
+  { kind: "project" }
+>;
 export function useRelayWrite() {
   const mutate = useMutation(api.relay.write);
   const locked = useRef(false);
@@ -180,9 +184,7 @@ export function Projects() {
       >
         <form
           className="grid gap-5"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const values = new FormData(event.currentTarget);
+          action={async (values) => {
             const result = await write({
               kind: "create_project",
               name: String(values.get("name") ?? ""),
@@ -263,11 +265,25 @@ export function Project({ projectId }: { projectId: string }) {
     api.relay.read,
     isAuthenticated ? { command: { kind: "project", projectId } } : "skip",
   );
-  const { write, pending, error } = useRelayWrite();
+  if (!data || data.kind !== "project")
+    return (
+      <ProjectFrame title="Workspace">
+        <DocumentLoading />
+      </ProjectFrame>
+    );
+  return <LoadedProject projectId={projectId} data={data} />;
+}
+
+function LoadedProject({
+  projectId,
+  data,
+}: {
+  projectId: string;
+  data: ProjectData;
+}) {
   const searchParams = useSearchParams();
   const selected = searchParams.get("topic") ?? "";
   const discover = searchParams.get("view") === "discover";
-  const topicRequest = useRef<string | null>(null);
   function setSelected(topicId: string) {
     const params = new URLSearchParams(searchParams.toString());
     if (topicId) params.set("topic", topicId);
@@ -279,19 +295,64 @@ export function Project({ projectId }: { projectId: string }) {
       `/projects/${projectId}${query ? `?${query}` : ""}`,
     );
   }
+  return (
+    <ProjectFrame title={data.project.name}>
+      {!selected || discover ? (
+        <WorkspaceNavigation projectId={projectId} discover={discover} />
+      ) : null}
+      <ProjectView
+        projectId={projectId}
+        data={data}
+        selected={selected}
+        discover={discover}
+        onSelect={setSelected}
+      />
+    </ProjectFrame>
+  );
+}
+
+function ProjectView({
+  projectId,
+  data,
+  selected,
+  discover,
+  onSelect,
+}: {
+  projectId: string;
+  data: ProjectData;
+  selected: string;
+  discover: boolean;
+  onSelect: (topicId: string) => void;
+}) {
+  if (discover) return <Discover projectId={projectId} topics={data.topics} />;
+  if (selected)
+    return (
+      <Topic
+        key={selected}
+        topicId={selected}
+        projectId={projectId}
+        onBack={() => onSelect("")}
+      />
+    );
+  return <ProjectTopics projectId={projectId} data={data} onSelect={onSelect} />;
+}
+
+function ProjectTopics({
+  projectId,
+  data,
+  onSelect,
+}: {
+  projectId: string;
+  data: ProjectData;
+  onSelect: (topicId: string) => void;
+}) {
+  const { write, pending, error } = useRelayWrite();
+  const topicRequest = useRef<string | null>(null);
   const [adding, setAdding] = useState(false);
   const createTrigger = useRef<HTMLElement | null>(null);
   const [search, setSearch] = useState("");
-  if (!data || data.kind !== "project")
-    return (
-      <ProjectFrame title="Workspace">
-        <DocumentLoading />
-      </ProjectFrame>
-    );
   const normalizedSearch = search.toLowerCase();
-  const topicRows = selected
-    ? []
-    : data.topics.reduce<ReactNode[]>((rows, topic) => {
+  const topicRows = data.topics.reduce<ReactNode[]>((rows, topic) => {
         if (
           !`${topic.title} ${topic.question}`
             .toLowerCase()
@@ -306,7 +367,7 @@ export function Project({ projectId }: { projectId: string }) {
             prefetch={false}
             onNavigate={(event) => {
               event.preventDefault();
-              setSelected(topic._id);
+              onSelect(topic._id);
             }}
             className="workspace-list-row"
           >
@@ -343,21 +404,7 @@ export function Project({ projectId }: { projectId: string }) {
         return rows;
       }, []);
   return (
-    <ProjectFrame title={data.project.name}>
-      {!selected || discover ? (
-        <WorkspaceNavigation projectId={projectId} discover={discover} />
-      ) : null}
-      {discover ? (
-        <Discover projectId={projectId} topics={data.topics} />
-      ) : selected ? (
-        <Topic
-          key={selected}
-          topicId={selected}
-          projectId={projectId}
-          onBack={() => setSelected("")}
-        />
-      ) : (
-        <>
+    <>
           <WorkspaceHeading
             title={data.project.name}
             description="Your ideas, research, and scripts. Pick up where you left off."
@@ -383,9 +430,7 @@ export function Project({ projectId }: { projectId: string }) {
           >
             <form
               className="grid gap-5"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                const values = new FormData(event.currentTarget);
+              action={async (values) => {
                 const result = await write({
                   kind: "create_topic",
                   requestKey: (topicRequest.current ??= createRequestKey()),
@@ -396,7 +441,7 @@ export function Project({ projectId }: { projectId: string }) {
                 if (result) {
                   topicRequest.current = null;
                   setAdding(false);
-                  setSelected(result.id);
+                  onSelect(result.id);
                 }
               }}
             >
@@ -474,9 +519,7 @@ export function Project({ projectId }: { projectId: string }) {
               </EmptyDocument>
             ) : null}
           </div>
-        </>
-      )}
-    </ProjectFrame>
+    </>
   );
 }
 function Topic({
@@ -649,60 +692,95 @@ function TopicDocument({
   data: TopicData;
   onViewResearch: () => void;
 }) {
+  if (tab === "research")
+    return <ResearchTopicDocument latest={latest} data={data} />;
+  if (script)
+    return (
+      <div className="workspace-document">
+        <ScriptDocument row={script} research={data.research} />
+      </div>
+    );
+  return (
+    <EmptyScriptDocument
+      latest={latest}
+      data={data}
+      onViewResearch={onViewResearch}
+    />
+  );
+}
+
+function ResearchTopicDocument({
+  latest,
+  data,
+}: {
+  latest: Doc<"researchVersions"> | undefined;
+  data: TopicData;
+}) {
   return (
     <div className="workspace-document">
-      {tab === "research" ? (
-        latest ? (
-          <>
-            <Research row={latest} />
-            {data.draft?.openQuestions.length ? (
-              <section className="mt-8">
-                <h3 className="text-sm font-medium">Gaps & open questions</h3>
-                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
-                  {data.draft.openQuestions.map((q) => (
-                    <li key={q}>{q}</li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-          </>
-        ) : (
-          <EmptyDocument
-            title="Ready for a little discovery"
-            description="Ask your connected agent to investigate this question. Review the findings here when they’re ready."
-          >
-            <AgentPrompt
-              prompt={`Research the Relay topic “${data.topic.title}” (topic ID ${data.topic._id}) in project ${data.topic.projectId}. Investigate: ${data.topic.question} Break the question into useful subtopics, read supporting sources, resolve important gaps, and cross-check material claims with an independent model. Record uncertainty and verification honestly, then save the completed research in Relay for my review. Continue through research and saving without asking me to manage intermediate steps.`}
-            />
-          </EmptyDocument>
-        )
-      ) : script ? (
-        <ScriptDocument row={script} research={data.research} />
+      {latest ? (
+        <>
+          <Research row={latest} />
+          {data.draft?.openQuestions.length ? (
+            <section className="mt-8">
+              <h3 className="text-sm font-medium">Gaps & open questions</h3>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
+                {data.draft.openQuestions.map((question) => (
+                  <li key={question}>{question}</li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </>
       ) : (
         <EmptyDocument
-          title={
-            latest?.review.kind === "approved"
-              ? "Your research is ready to become a story"
-              : "Research comes first"
-          }
-          description={
-            latest?.review.kind === "approved"
-              ? "Ask your agent to turn the approved findings into narration and a visual plan."
-              : "Review and approve the research, then build your script on a solid foundation."
-          }
+          title="Ready for a little discovery"
+          description="Ask your connected agent to investigate this question. Review the findings here when they’re ready."
         >
-          {latest?.review.kind === "approved" ? (
-            <AgentPrompt
-              prompt={`Read the current approved research for the Relay topic “${data.topic.title}”. Write and save a video script with a clear title, hook, ordered scenes, narration, and a concrete visual plan for each scene. Use charts, sourced data, or real assets where the evidence supports them. Stop for my review.`}
-            />
-          ) : (
-            <Button variant="outline" onClick={onViewResearch}>
-              View research
-              <ChevronRight aria-hidden />
-            </Button>
-          )}
+          <AgentPrompt
+            prompt={`Research the Relay topic “${data.topic.title}” (topic ID ${data.topic._id}) in project ${data.topic.projectId}. Investigate: ${data.topic.question} Break the question into useful subtopics, read supporting sources, resolve important gaps, and cross-check material claims with an independent model. Record uncertainty and verification honestly, then save the completed research in Relay for my review. Continue through research and saving without asking me to manage intermediate steps.`}
+          />
         </EmptyDocument>
       )}
+    </div>
+  );
+}
+
+function EmptyScriptDocument({
+  latest,
+  data,
+  onViewResearch,
+}: {
+  latest: Doc<"researchVersions"> | undefined;
+  data: TopicData;
+  onViewResearch: () => void;
+}) {
+  const ready = latest?.review.kind === "approved";
+  return (
+    <div className="workspace-document">
+      <EmptyDocument
+        title={
+          ready
+            ? "Your research is ready to become a story"
+            : "Research comes first"
+        }
+        description={
+          ready
+            ? "Ask your agent to turn the approved findings into narration and a visual plan."
+            : "Review and approve the research, then build your script on a solid foundation."
+        }
+      >
+        {ready ? (
+          <AgentPrompt
+            prompt={`Read the current approved research for the Relay topic “${data.topic.title}”. Write and save a video script with a clear title, hook, ordered scenes, narration, and a concrete visual plan for each scene. Use charts, sourced data, or real assets where the evidence supports them. Stop for my review.`}
+          />
+        ) : (
+          <Button variant="outline" onClick={onViewResearch}>
+            View research
+            <ChevronRight aria-hidden />
+          </Button>
+        )}
+      </EmptyDocument>
     </div>
   );
 }
@@ -753,49 +831,31 @@ function Review({
   const [note, setNote] = useState("");
   const [requesting, setRequesting] = useState(false);
   const blockerId = `approval-blockers-${row._id}`;
+  const commandKind =
+    kind === "research" ? "review_research" : "review_script";
   return (
     <div className={`workspace-review ${compact ? "!mt-0 mb-7" : ""}`}>
       <div className="flex items-center gap-2 text-sm font-medium">
-        {row.review.kind === "approved" ? (
-          <Check size={16} aria-hidden />
-        ) : row.review.kind === "changes_requested" ? (
-          <MessageSquare size={16} aria-hidden />
-        ) : (
-          <Circle size={14} aria-hidden />
-        )}
+        <ReviewIcon kind={row.review.kind} />
         {reviewLabel(row.review)}
       </div>
       {row.review.kind === "changes_requested" ? (
         <p className="mb-4 text-sm">{row.review.note}</p>
       ) : null}
-      {row.review.kind === "pending" && blockers.length ? (
-        <div
-          id={blockerId}
-          role="status"
-          className="w-full rounded-lg bg-surface-subtle p-4 text-sm leading-6"
-        >
-          <p className="font-medium">Approval needs attention</p>
-          <p className="mt-1 text-muted-foreground">
-            {kind === "research"
-              ? "Every finding must be supported and have at least one source."
-              : "The script must use the current approved research."}
-          </p>
-          <ul className="mt-2 list-disc space-y-1 ps-5 text-muted-foreground">
-            {blockers.map((blocker) => (
-              <li key={blocker}>{blocker}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {row.review.kind !== "approved" &&
-      row.review.kind !== "changes_requested" ? (
+      <ReviewBlockers
+        show={row.review.kind === "pending"}
+        kind={kind}
+        blockers={blockers}
+        blockerId={blockerId}
+      />
+      {row.review.kind === "pending" ? (
         <div className="flex flex-wrap gap-2">
           <Button
             aria-describedby={blockers.length ? blockerId : undefined}
             disabled={pending || blockers.length > 0}
             onClick={() =>
               write({
-                kind: kind === "research" ? "review_research" : "review_script",
+                kind: commandKind,
                 versionId: row._id,
                 decision: "approved",
                 note: "",
@@ -824,8 +884,7 @@ function Review({
             <form
               action={async () => {
                 const result = await write({
-                  kind:
-                    kind === "research" ? "review_research" : "review_script",
+                  kind: commandKind,
                   versionId: row._id,
                   decision: "changes_requested",
                   note,
@@ -863,6 +922,50 @@ function Review({
         </div>
       ) : null}
       {!requesting ? <ErrorMessage error={error} /> : null}
+    </div>
+  );
+}
+
+function ReviewIcon({
+  kind,
+}: {
+  kind: Doc<"researchVersions">["review"]["kind"];
+}) {
+  if (kind === "approved") return <Check size={16} aria-hidden />;
+  if (kind === "changes_requested")
+    return <MessageSquare size={16} aria-hidden />;
+  return <Circle size={14} aria-hidden />;
+}
+
+function ReviewBlockers({
+  show,
+  kind,
+  blockers,
+  blockerId,
+}: {
+  show: boolean;
+  kind: "research" | "script";
+  blockers: string[];
+  blockerId: string;
+}) {
+  if (!show || blockers.length === 0) return null;
+  return (
+    <div
+      id={blockerId}
+      role="status"
+      className="w-full rounded-lg bg-surface-subtle p-4 text-sm leading-6"
+    >
+      <p className="font-medium">Approval needs attention</p>
+      <p className="mt-1 text-muted-foreground">
+        {kind === "research"
+          ? "Every finding must be supported and have at least one source."
+          : "The script must use the current approved research."}
+      </p>
+      <ul className="mt-2 list-disc space-y-1 ps-5 text-muted-foreground">
+        {blockers.map((blocker) => (
+          <li key={blocker}>{blocker}</li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -1160,69 +1263,23 @@ function ScriptDocument({
   row: Doc<"scriptVersions">;
   research: Doc<"researchVersions">[];
 }) {
-  const { write, pending, error } = useRelayWrite();
   const [editing, setEditing] = useState(false);
-  const [title, setTitle] = useState(row.title);
-  const [editableScenes, setEditableScenes] = useState(() =>
-    fixedRows(`${row._id}:scene`, row.scenes),
-  );
-  const [baseId, setBaseId] = useState(row._id);
   const [showVisuals, setShowVisuals] = useState(false);
-  const scenes = editableScenes.map(({ value }) => value);
-  useDraftProtection(
-    editing &&
-      (title !== row.title ||
-        JSON.stringify(scenes) !== JSON.stringify(row.scenes)),
-  );
   const source = research.find((item) => item._id === row.researchVersionId);
   const latest = research[0];
   const outdated =
     !source || source.review.kind !== "approved" || latest?._id !== source._id;
   return (
     <section className="max-w-[720px]">
-      <p className="mb-4 text-xs text-muted-foreground">
-        Based on approved research{" "}
-        {source?.draftRevision
-          ? `revision ${source.draftRevision}`
-          : source
-            ? `saved ${formatUtcDate(source._creationTime)}`
-            : row.researchVersionId}
-        . Approval remains attached to that exact version.
-      </p>
+      <ScriptSource source={source} fallbackId={row.researchVersionId} />
       {!editing ? (
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
-          <span className="text-xs text-muted-foreground">
-            {row.scenes.length} scenes ·{" "}
-            {row.scenes.reduce(
-              (total, scene) =>
-                total + scene.narration.trim().split(/\s+/).length,
-              0,
-            )}{" "}
-            words
-          </span>
-          <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              aria-pressed={showVisuals}
-              onClick={() => setShowVisuals(!showVisuals)}
-            >
-              {showVisuals ? "Hide visuals" : "Show visuals"}
-            </Button>
-            <Button
-              variant="ghost"
-              disabled={outdated}
-              onClick={() => {
-                setTitle(row.title);
-                setBaseId(row._id);
-                setEditableScenes(fixedRows(`${row._id}:scene`, row.scenes));
-                setEditing(true);
-              }}
-            >
-              <Pencil aria-hidden />
-              Edit
-            </Button>
-          </div>
-        </div>
+        <ScriptToolbar
+          row={row}
+          showVisuals={showVisuals}
+          outdated={outdated}
+          onToggleVisuals={() => setShowVisuals((shown) => !shown)}
+          onEdit={() => setEditing(true)}
+        />
       ) : null}
       {outdated ? (
         <p className="mb-6 text-sm" role="status">
@@ -1231,123 +1288,205 @@ function ScriptDocument({
         </p>
       ) : null}
       {editing ? (
-        <form
-          className="grid gap-5"
-          action={async () => {
-            const result = await write({
-              kind: "save_script",
-              researchVersionId: row.researchVersionId,
-              baseId,
-              title,
-              scenes,
-            });
-            if (result) setEditing(false);
-          }}
-        >
-          <Field label="Title">
-            <Input
-              disabled={pending}
-              value={title}
-              required
-              maxLength={160}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </Field>
-          {editableScenes.map(({ key, value: scene }, index) => (
-            <div key={key} className="grid gap-4 border-t border-border pt-5">
-              <Field label={`Scene ${index + 1} narration`}>
-                <Textarea
-                  disabled={pending}
-                  required
-                  value={scene.narration}
-                  maxLength={10000}
-                  onChange={(e) =>
-                    setEditableScenes(
-                      editableScenes.map((item, i) =>
-                        i === index
-                          ? {
-                              ...item,
-                              value: {
-                                ...item.value,
-                                narration: e.target.value,
-                              },
-                            }
-                          : item,
-                      ),
-                    )
-                  }
-                />
-              </Field>
-              <Field label="Visual plan">
-                <Textarea
-                  disabled={pending}
-                  required
-                  value={scene.visual}
-                  maxLength={10000}
-                  onChange={(e) =>
-                    setEditableScenes(
-                      editableScenes.map((item, i) =>
-                        i === index
-                          ? {
-                              ...item,
-                              value: { ...item.value, visual: e.target.value },
-                            }
-                          : item,
-                      ),
-                    )
-                  }
-                />
-              </Field>
-            </div>
-          ))}
-          <div className="flex gap-3">
-            <Button type="submit" disabled={pending || outdated}>
-              {pending ? "Saving…" : "Save changes"}
-            </Button>
-            <Button
-              variant="outline"
-              type="button"
-              onClick={() => {
-                if (
-                  (title === row.title &&
-                    JSON.stringify(scenes) === JSON.stringify(row.scenes)) ||
-                  window.confirm("Discard your unsaved changes?")
-                )
-                  setEditing(false);
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-          <ErrorMessage error={error} />
-        </form>
+        <ScriptEditor
+          row={row}
+          outdated={outdated}
+          onClose={() => setEditing(false)}
+        />
       ) : (
-        <>
-          <h2 className="text-lg font-semibold">{row.title}</h2>
-          {row.scenes.map((scene, index) => (
-            <article className="mt-6" key={sceneKey(scene)}>
-              <h3 className="mb-2 text-xs text-muted-foreground">
-                Scene {index + 1}
-              </h3>
-              <p className="whitespace-pre-wrap text-[15px] leading-7">
-                {scene.narration}
-              </p>
-              {showVisuals ? (
-                <p className="mt-3 whitespace-pre-wrap rounded-lg bg-surface-subtle p-4 text-sm leading-7 text-muted-foreground">
-                  {scene.visual}
-                </p>
-              ) : null}
-            </article>
-          ))}
-          <Review
-            row={row}
-            kind="script"
-            blockers={
-              outdated ? ["This script is based on older research."] : []
-            }
-          />
-        </>
+        <PublishedScript row={row} showVisuals={showVisuals} outdated={outdated} />
       )}
     </section>
+  );
+}
+
+function ScriptSource({
+  source,
+  fallbackId,
+}: {
+  source: Doc<"researchVersions"> | undefined;
+  fallbackId: string;
+}) {
+  const label = source?.draftRevision
+    ? `revision ${source.draftRevision}`
+    : source
+      ? `saved ${formatUtcDate(source._creationTime)}`
+      : fallbackId;
+  return (
+    <p className="mb-4 text-xs text-muted-foreground">
+      Based on approved research {label}. Approval remains attached to that
+      exact version.
+    </p>
+  );
+}
+
+function ScriptToolbar({
+  row,
+  showVisuals,
+  outdated,
+  onToggleVisuals,
+  onEdit,
+}: {
+  row: Doc<"scriptVersions">;
+  showVisuals: boolean;
+  outdated: boolean;
+  onToggleVisuals: () => void;
+  onEdit: () => void;
+}) {
+  const words = row.scenes.reduce(
+    (total, scene) => total + scene.narration.trim().split(/\s+/).length,
+    0,
+  );
+  return (
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
+      <span className="text-xs text-muted-foreground">
+        {row.scenes.length} scenes · {words} words
+      </span>
+      <div className="flex gap-2">
+        <Button variant="ghost" aria-pressed={showVisuals} onClick={onToggleVisuals}>
+          {showVisuals ? "Hide visuals" : "Show visuals"}
+        </Button>
+        <Button variant="ghost" disabled={outdated} onClick={onEdit}>
+          <Pencil aria-hidden />
+          Edit
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ScriptEditor({
+  row,
+  outdated,
+  onClose,
+}: {
+  row: Doc<"scriptVersions">;
+  outdated: boolean;
+  onClose: () => void;
+}) {
+  const { write, pending, error } = useRelayWrite();
+  const [title, setTitle] = useState(row.title);
+  const [editableScenes, setEditableScenes] = useState(() =>
+    fixedRows(`${row._id}:scene`, row.scenes),
+  );
+  const scenes = editableScenes.map(({ value }) => value);
+  const dirty =
+    title !== row.title || JSON.stringify(scenes) !== JSON.stringify(row.scenes);
+  useDraftProtection(dirty);
+  function updateScene(
+    index: number,
+    field: "narration" | "visual",
+    value: string,
+  ) {
+    setEditableScenes((items) =>
+      items.map((item, itemIndex) =>
+        itemIndex === index
+          ? { ...item, value: { ...item.value, [field]: value } }
+          : item,
+      ),
+    );
+  }
+  return (
+    <form
+      className="grid gap-5"
+      action={async () => {
+        const result = await write({
+          kind: "save_script",
+          researchVersionId: row.researchVersionId,
+          baseId: row._id,
+          title,
+          scenes,
+        });
+        if (result) onClose();
+      }}
+    >
+      <Field label="Title">
+        <Input
+          disabled={pending}
+          value={title}
+          required
+          maxLength={160}
+          onChange={(event) => setTitle(event.target.value)}
+        />
+      </Field>
+      {editableScenes.map(({ key, value: scene }, index) => (
+        <div key={key} className="grid gap-4 border-t border-border pt-5">
+          <Field label={`Scene ${index + 1} narration`}>
+            <Textarea
+              disabled={pending}
+              required
+              value={scene.narration}
+              maxLength={10000}
+              onChange={(event) =>
+                updateScene(index, "narration", event.target.value)
+              }
+            />
+          </Field>
+          <Field label="Visual plan">
+            <Textarea
+              disabled={pending}
+              required
+              value={scene.visual}
+              maxLength={10000}
+              onChange={(event) =>
+                updateScene(index, "visual", event.target.value)
+              }
+            />
+          </Field>
+        </div>
+      ))}
+      <div className="flex gap-3">
+        <Button type="submit" disabled={pending || outdated}>
+          {pending ? "Saving…" : "Save changes"}
+        </Button>
+        <Button
+          variant="outline"
+          type="button"
+          onClick={() => {
+            if (!dirty || window.confirm("Discard your unsaved changes?"))
+              onClose();
+          }}
+        >
+          Cancel
+        </Button>
+      </div>
+      <ErrorMessage error={error} />
+    </form>
+  );
+}
+
+function PublishedScript({
+  row,
+  showVisuals,
+  outdated,
+}: {
+  row: Doc<"scriptVersions">;
+  showVisuals: boolean;
+  outdated: boolean;
+}) {
+  return (
+    <>
+      <h2 className="text-lg font-semibold">{row.title}</h2>
+      {row.scenes.map((scene, index) => (
+        <article className="mt-6" key={sceneKey(scene)}>
+          <h3 className="mb-2 text-xs text-muted-foreground">
+            Scene {index + 1}
+          </h3>
+          <p className="whitespace-pre-wrap text-[15px] leading-7">
+            {scene.narration}
+          </p>
+          {showVisuals ? (
+            <p className="mt-3 whitespace-pre-wrap rounded-lg bg-surface-subtle p-4 text-sm leading-7 text-muted-foreground">
+              {scene.visual}
+            </p>
+          ) : null}
+        </article>
+      ))}
+      <Review
+        row={row}
+        kind="script"
+        blockers={outdated ? ["This script is based on older research."] : []}
+      />
+    </>
   );
 }

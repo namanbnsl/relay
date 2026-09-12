@@ -124,15 +124,18 @@ export const storePacket = internalMutation({
       return;
     }
     const packetId = await ctx.db.insert("researchPackets", packet);
-    for (const source of sources.slice(0, 20))
-      await ctx.db.insert("researchEvidence", {
+    await Promise.all(
+      sources.slice(0, 20).map((source) =>
+        ctx.db.insert("researchEvidence", {
         runId: r._id,
         originalUrl: source.url,
         canonicalUrl: new URL(source.url).href,
         ...(source.title ? { title: source.title } : {}),
         outcome: { kind: "pending" },
         attempts: 0,
-      });
+        }),
+      ),
+    );
     await ctx.db.patch(r._id, {
       packetId,
       stage: "retrieving_evidence",
@@ -223,9 +226,11 @@ export const finish = internalMutation({
             "No source text was retrieved. Search and read sources before synthesizing supported findings.",
           ]
         : []),
-      ...evidence
-        .filter((e) => e.outcome.kind !== "retrieved")
-        .map((e) => `Source retrieval incomplete: ${e.originalUrl}`),
+      ...evidence.flatMap((item) =>
+        item.outcome.kind === "retrieved"
+          ? []
+          : [`Source retrieval incomplete: ${item.originalUrl}`],
+      ),
     ];
     await ctx.db.patch(p._id, { gaps: [...new Set(gaps)] });
     await ctx.db.patch(runId, {

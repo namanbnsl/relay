@@ -171,21 +171,26 @@ export async function writeDraft(
     throw new ConvexError(
       "Every finding needs retrieved evidence. Retrieve its sources, or remove the unsupported finding; do not remove citations to bypass retrieval.",
     );
-  const findings: Infer<typeof finding>[] = [];
-  for (const f of input.findings) {
-    const ids: Infer<typeof evidenceId>[] = [];
-    for (const id of f.evidenceIds)
-      ids.push((await resolveEvidence(ctx, subject, topic._id, id)).id);
-    const old = previous?.findings.find((old) => old.id === f.id);
+  const previousFindings = new Map(
+    previous?.findings.map((finding) => [finding.id, finding]),
+  );
+  const findings: Infer<typeof finding>[] = await Promise.all(
+    input.findings.map(async (f) => {
+    const ids: Infer<typeof evidenceId>[] = await Promise.all(
+      f.evidenceIds.map(async (id) =>
+        (await resolveEvidence(ctx, subject, topic._id, id)).id,
+      ),
+    );
+    const old = previousFindings.get(f.id);
     const unchanged = old && content(old) === content(f);
     const findingRevision = unchanged ? old.revision : revision;
     let verification = unchanged ? old.verification : undefined;
     if (f.verification && f.verification.findingRevision === findingRevision) {
-      const supporting: Infer<typeof evidenceId>[] = [];
-      for (const id of f.verification.evidenceIds)
-        supporting.push(
+      const supporting: Infer<typeof evidenceId>[] = await Promise.all(
+        f.verification.evidenceIds.map(async (id) =>
           (await resolveEvidence(ctx, subject, topic._id, id)).id,
-        );
+        ),
+      );
       verification = { ...f.verification, evidenceIds: supporting };
     } else if (
       f.verification &&
@@ -195,7 +200,7 @@ export async function writeDraft(
         "Verification must reference the exact finding revision.",
       );
     }
-    findings.push({
+    return {
       id: f.id,
       revision: findingRevision,
       text: f.text,
@@ -203,8 +208,9 @@ export async function writeDraft(
       note: f.note,
       evidenceIds: ids,
       ...(verification ? { verification } : {}),
-    });
-  }
+    };
+  }),
+  );
   if (!input.summary.trim() || !findings.length)
     throw new ConvexError(
       "Save a research summary and at least one finding with retrieved evidence. Research saves are immediately available for review.",

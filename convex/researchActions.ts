@@ -266,15 +266,17 @@ export const advance = internalAction({
         return claimed ? getContents(evidence.originalUrl) : null;
       }),
     );
-    const outcomes: ("retry" | "continue")[] = [];
-    for (const [index, evidence] of batch.entries()) {
+    const storeEvidence = internal.researchSteps.storeEvidence;
+    const outcomes = await Promise.all(
+      batch.map(async (evidence, index): Promise<"retry" | "continue"> => {
       const fetchedResult = fetched[index];
       try {
+        if (!fetchedResult) throw new Error("Missing retrieval result");
         if (fetchedResult.status === "rejected") throw fetchedResult.reason;
         const content = fetchedResult.value;
         if (content === null) {
           if (evidence.attempts >= 2)
-            await ctx.runMutation(internal.researchSteps.storeEvidence, {
+            await ctx.runMutation(storeEvidence, {
               evidenceId: evidence._id,
               fields: {
                 runId,
@@ -289,7 +291,7 @@ export const advance = internalAction({
                 },
               },
             });
-          continue;
+          return "continue";
         }
         const page = content.results[0];
         if (!page?.text?.trim())
@@ -297,7 +299,7 @@ export const advance = internalAction({
         const storageId = await ctx.storage.store(
           new Blob([page.text], { type: "text/plain;charset=utf-8" }),
         );
-        await ctx.runMutation(internal.researchSteps.storeEvidence, {
+        await ctx.runMutation(storeEvidence, {
           evidenceId: evidence._id,
           fields: {
             runId,
@@ -328,10 +330,9 @@ export const advance = internalAction({
           error instanceof ProviderError &&
           error.retryable
         ) {
-          outcomes.push("retry");
-          continue;
+          return "retry";
         }
-        await ctx.runMutation(internal.researchSteps.storeEvidence, {
+        await ctx.runMutation(storeEvidence, {
           evidenceId: evidence._id,
           fields: {
             runId,
@@ -347,8 +348,9 @@ export const advance = internalAction({
           },
         });
       }
-      outcomes.push("continue");
-    }
+      return "continue";
+      }),
+    );
     return outcomes.includes("retry") ? "retry" : "continue";
   },
 });

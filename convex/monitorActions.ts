@@ -257,16 +257,16 @@ export const collect = internalAction({
       const runs = z
         .object({ data: z.array(remoteRun) })
         .parse(await exaMonitorRequest(`${path}/runs?limit=100`));
-      for (const run of runs.data) {
+      await Promise.all(runs.data.map(async (run) => {
         if (
           await ctx.runQuery(internal.monitorState.hasDelivery, {
             monitorId,
             runId: run.id,
           })
         )
-          continue;
+          return;
         if (!["completed", "failed", "cancelled"].includes(run.status))
-          continue;
+          return;
         const full = remoteRun.parse(
           await exaMonitorRequest(`${path}/runs/${encodeURIComponent(run.id)}`),
         );
@@ -281,7 +281,7 @@ export const collect = internalAction({
           at: Date.parse(full.completedAt ?? full.updatedAt),
           candidates: parseCandidates(full),
         });
-      }
+      }));
     } catch (error) {
       await ctx.runMutation(internal.monitorState.deliveryError, {
         monitorId,

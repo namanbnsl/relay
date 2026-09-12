@@ -20,6 +20,18 @@ import {
 import { nextStart, sameFrequency } from "./model/schedule";
 import { latestDraft } from "./model/drafts";
 
+const DateTimeFormat = Intl.DateTimeFormat;
+const timeZoneFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function validateTimeZone(timeZone: string, at: number) {
+  let formatter = timeZoneFormatters.get(timeZone);
+  if (!formatter) {
+    formatter = new DateTimeFormat("en", { timeZone });
+    timeZoneFormatters.set(timeZone, formatter);
+  }
+  formatter.format(at);
+}
+
 export function monitoringSetup() {
   return process.env.MONITORING_ENABLED === "true" &&
     process.env.EXA_API_KEY &&
@@ -223,7 +235,7 @@ async function saveSchedule(
       const next = nextStart(Date.now(), f.time, f.timezone);
       if (!f.paused && status === "active") due = next;
     } else if (f.kind === "scheduled" && status === "active") {
-      new Intl.DateTimeFormat("en", { timeZone: f.timezone }).format(f.at);
+      validateTimeZone(f.timezone, f.at);
       if (f.at <= Date.now()) throw new Error("past");
       due = f.at;
     }
@@ -285,14 +297,17 @@ export async function writeOwned(
         .query("monitors")
         .withIndex("by_project", (q) => q.eq("projectId", p._id))
         .collect();
-      for (const m of monitors.filter((m) => !m.removed)) {
-        await ctx.db.patch(m._id, {
-          generation: m.generation + 1,
-          sync: "pending",
-          nextCheck: undefined,
-        });
-        await queueSync(ctx, m._id);
-      }
+      await Promise.all(
+        monitors.map(async (monitor) => {
+          if (monitor.removed) return;
+          await ctx.db.patch(monitor._id, {
+            generation: monitor.generation + 1,
+            sync: "pending",
+            nextCheck: undefined,
+          });
+          await queueSync(ctx, monitor._id);
+        }),
+      );
       return p._id;
     }
     case "save_brief": {
@@ -364,18 +379,21 @@ export async function writeOwned(
         .query("monitors")
         .withIndex("by_project", (q) => q.eq("projectId", p._id))
         .collect();
-      for (const dependent of dependents)
-        if (
-          dependent._id !== id &&
-          !dependent.removed &&
-          dependent.domains.length === 0
-        ) {
+      await Promise.all(
+        dependents.map(async (dependent) => {
+          if (
+            dependent._id === id ||
+            dependent.removed ||
+            dependent.domains.length > 0
+          )
+            return;
           await ctx.db.patch(dependent._id, {
             generation: dependent.generation + 1,
             sync: "pending",
           });
           await queueSync(ctx, dependent._id);
-        }
+        }),
+      );
       return id;
     }
     case "monitor_action": {
@@ -424,14 +442,16 @@ export async function writeOwned(
             .query("monitors")
             .withIndex("by_project", (q) => q.eq("projectId", m.projectId))
             .collect();
-          for (const dependent of dependents)
-            if (!dependent.removed && dependent.domains.length === 0) {
+          await Promise.all(
+            dependents.map(async (dependent) => {
+              if (dependent.removed || dependent.domains.length > 0) return;
               await ctx.db.patch(dependent._id, {
                 generation: dependent.generation + 1,
                 sync: "pending",
               });
               await queueSync(ctx, dependent._id);
-            }
+            }),
+          );
         }
       }
       return m._id;

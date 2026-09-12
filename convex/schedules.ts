@@ -14,13 +14,17 @@ export const tick = internalMutation({
         q.gt("nextResearchAt", 0).lte("nextResearchAt", Date.now()),
       )
       .take(100);
-    for (const t of due)
-      if (t.nextResearchAt !== undefined)
-        await ctx.scheduler.runAfter(0, internal.schedules.cycle, {
-          topicId: t._id,
-          generation: t.scheduleGeneration ?? 0,
-          due: t.nextResearchAt,
-        });
+    await Promise.all(
+      due.map((topic) =>
+        topic.nextResearchAt === undefined
+          ? Promise.resolve()
+          : ctx.scheduler.runAfter(0, internal.schedules.cycle, {
+              topicId: topic._id,
+              generation: topic.scheduleGeneration ?? 0,
+              due: topic.nextResearchAt,
+            }),
+      ),
+    );
   },
 });
 export const cycle = internalMutation({

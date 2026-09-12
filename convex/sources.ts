@@ -22,23 +22,28 @@ export const owned = internalQuery({
     cached: v.array(workspaceEvidenceDoc),
   }),
   handler: async (ctx, args) => {
-    const topic = await topicFor(ctx, args.subject, args.topicId);
     if (args.sourceIds.length > 5)
       throw new ConvexError("Read at most 5 sources at once.");
-    const sources: Doc<"workspaceSources">[] = [];
-    const cached: Doc<"workspaceEvidence">[] = [];
-    for (const value of new Set(args.sourceIds)) {
+    const topic = await topicFor(ctx, args.subject, args.topicId);
+    const resolved = await Promise.all(
+      [...new Set(args.sourceIds)].map(async (value) => {
       const id = ctx.db.normalizeId("workspaceSources", value);
       const source = id ? await ctx.db.get(id) : null;
       if (!source || source.topicId !== topic._id)
         throw new ConvexError("Source not found in this topic.");
-      sources.push(source);
       const evidence = await ctx.db
         .query("workspaceEvidence")
         .withIndex("by_source", (q) => q.eq("sourceId", source._id))
         .first();
-      if (evidence) cached.push(evidence);
-    }
+      return { source, evidence };
+      }),
+    );
+    const sources: Doc<"workspaceSources">[] = resolved.map(
+      ({ source }) => source,
+    );
+    const cached: Doc<"workspaceEvidence">[] = resolved.flatMap(
+      ({ evidence }) => (evidence ? [evidence] : []),
+    );
     return { topicId: topic._id, sources, cached };
   },
 });
@@ -57,16 +62,18 @@ export const saveSearch = internalMutation({
   handler: async (ctx, { subject, results, ...search }) => {
     await topicFor(ctx, subject, search.topicId);
     const searchId = await ctx.db.insert("workspaceSearches", search);
-    const sources: Doc<"workspaceSources">[] = [];
-    for (const result of results) {
-      const id = await ctx.db.insert("workspaceSources", {
+    const sources = await Promise.all(
+      results.map(async (result) => {
+        const id = await ctx.db.insert("workspaceSources", {
         topicId: search.topicId,
         searchId,
         ...result,
       });
       const row = await ctx.db.get(id);
-      if (row) sources.push(row);
-    }
+        if (!row) throw new Error("Source insert failed");
+        return row;
+      }),
+    );
     return sources;
   },
 });
@@ -158,13 +165,17 @@ export const available = query({
     ).flat();
     return [
       ...local.map((e) => ({ id: e._id, title: e.title, url: e.url })),
-      ...remote
-        .filter((e) => e.outcome.kind === "retrieved")
-        .map((e) => ({
-          id: e._id,
-          title: e.title ?? e.canonicalUrl,
-          url: e.canonicalUrl,
-        })),
+      ...remote.flatMap((item) =>
+        item.outcome.kind === "retrieved"
+          ? [
+              {
+                id: item._id,
+                title: item.title ?? item.canonicalUrl,
+                url: item.canonicalUrl,
+              },
+            ]
+          : [],
+      ),
     ];
   },
 });

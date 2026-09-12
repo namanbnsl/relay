@@ -3,6 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ import {
 function stamp(at?: number) {
   return at === undefined ? "Not checked yet" : formatUtcDateTime(at);
 }
+type DiscoveryData = FunctionReturnType<typeof api.discovery.read>;
 export function WorkspaceNavigation({
   projectId,
   discover,
@@ -82,18 +84,52 @@ export function Discover({
   const [view, setView] = useState<"updates" | "sources">("updates");
   const [showDismissed, setShowDismissed] = useState(false);
   if (!data) return <DocumentLoading />;
-  const updates = data.updates.filter((u) => showDismissed || !u.dismissed);
-  const sources = data.monitors.filter((m) => !m.removed);
+  return (
+    <DiscoverContent
+      projectId={projectId}
+      topics={topics}
+      data={data}
+      view={view}
+      showDismissed={showDismissed}
+      onViewChange={setView}
+      onShowDismissedChange={setShowDismissed}
+    />
+  );
+}
+
+function nextMonitorCheck(monitors: DiscoveryData["monitors"]) {
   let next: number | undefined;
-  for (const source of sources) {
+  for (const source of monitors) {
     if (
       !source.paused &&
       source.nextCheck !== undefined &&
       (next === undefined || source.nextCheck < next)
-    ) {
+    )
       next = source.nextCheck;
-    }
   }
+  return next;
+}
+
+function DiscoverContent({
+  projectId,
+  topics,
+  data,
+  view,
+  showDismissed,
+  onViewChange,
+  onShowDismissedChange,
+}: {
+  projectId: string;
+  topics: Doc<"topics">[];
+  data: DiscoveryData;
+  view: "updates" | "sources";
+  showDismissed: boolean;
+  onViewChange: (view: "updates" | "sources") => void;
+  onShowDismissedChange: (show: boolean) => void;
+}) {
+  const updates = data.updates.filter((u) => showDismissed || !u.dismissed);
+  const sources = data.monitors.filter((m) => !m.removed);
+  const next = nextMonitorCheck(sources);
   return (
     <div>
       <div className="workspace-heading-row">
@@ -133,13 +169,13 @@ export function Discover({
         <nav aria-label="Discover views" className="workspace-view-switch">
           <button
             aria-pressed={view === "updates"}
-            onClick={() => setView("updates")}
+            onClick={() => onViewChange("updates")}
           >
             For you <span>{updates.length}</span>
           </button>
           <button
             aria-pressed={view === "sources"}
-            onClick={() => setView("sources")}
+            onClick={() => onViewChange("sources")}
           >
             Following <span>{sources.length}</span>
           </button>
@@ -152,59 +188,98 @@ export function Discover({
               type="checkbox"
               className="size-4 shrink-0 accent-foreground"
               checked={showDismissed}
-              onChange={(e) => setShowDismissed(e.target.checked)}
+              onChange={(e) => onShowDismissedChange(e.target.checked)}
             />
             Show dismissed
           </label>
         )}
       </div>
-      {view === "updates" ? (
-        <div className="workspace-feed">
-          {updates.length ? (
-            updates.map((update) => (
-              <UpdateCard key={update._id} update={update} topics={topics} />
-            ))
-          ) : (
-            <EmptyDocument
-              title={showDismissed ? "No updates yet" : "You’re all caught up"}
-              description={
-                sources.length
-                  ? "New discoveries will appear here after your next check."
-                  : "Tell Relay what to follow. Your next good idea can start here."
-              }
-            >
-              <Button variant="outline" onClick={() => setView("sources")}>
-                Choose what to follow <ArrowRight aria-hidden />
-              </Button>
-            </EmptyDocument>
-          )}
-        </div>
+      <DiscoverView
+        view={view}
+        updates={updates}
+        sources={sources}
+        topics={topics}
+        showDismissed={showDismissed}
+        available={data.setup.available}
+        onChooseSources={() => onViewChange("sources")}
+      />
+    </div>
+  );
+}
+
+function DiscoverView({
+  view,
+  updates,
+  sources,
+  topics,
+  showDismissed,
+  available,
+  onChooseSources,
+}: {
+  view: "updates" | "sources";
+  updates: DiscoveryData["updates"];
+  sources: DiscoveryData["monitors"];
+  topics: Doc<"topics">[];
+  showDismissed: boolean;
+  available: boolean;
+  onChooseSources: () => void;
+}) {
+  if (view === "sources")
+    return <SourceList sources={sources} available={available} />;
+  return (
+    <div className="workspace-feed">
+      {updates.length ? (
+        updates.map((update) => (
+          <UpdateCard key={update._id} update={update} topics={topics} />
+        ))
       ) : (
-        <div className="mt-5">
-          <p className="mb-6 max-w-xl text-sm leading-6 text-muted-foreground">
-            The subjects and websites Relay watches for new developments.
-          </p>
-          {!data.setup.available ? (
-            <p role="status" className="mb-5 text-sm text-muted-foreground">
-              Automatic discovery is currently unavailable. Your sources are
-              saved.
-            </p>
-          ) : null}
-          {sources.length ? (
-            sources.map((m) => (
-              <MonitorRow
-                key={m._id}
-                monitor={m}
-                available={data.setup.available}
-              />
-            ))
-          ) : (
-            <EmptyDocument
-              title="What should Relay follow?"
-              description="Add a subject, a website, or ask your connected agent to set up your sources."
-            />
-          )}
-        </div>
+        <EmptyDocument
+          title={showDismissed ? "No updates yet" : "You’re all caught up"}
+          description={
+            sources.length
+              ? "New discoveries will appear here after your next check."
+              : "Tell Relay what to follow. Your next good idea can start here."
+          }
+        >
+          <Button variant="outline" onClick={onChooseSources}>
+            Choose what to follow <ArrowRight aria-hidden />
+          </Button>
+        </EmptyDocument>
+      )}
+    </div>
+  );
+}
+
+function SourceList({
+  sources,
+  available,
+}: {
+  sources: DiscoveryData["monitors"];
+  available: boolean;
+}) {
+  return (
+    <div className="mt-5">
+      <p className="mb-6 max-w-xl text-sm leading-6 text-muted-foreground">
+        The subjects and websites Relay watches for new developments.
+      </p>
+      {!available ? (
+        <p role="status" className="mb-5 text-sm text-muted-foreground">
+          Automatic discovery is currently unavailable. Your sources are saved.
+        </p>
+      ) : null}
+      {sources.length ? (
+        sources.map((monitor) => (
+          <MonitorRow
+            key={monitor._id}
+            monitor={monitor}
+            available={available}
+          />
+        ))
+      ) : (
+        <EmptyDocument
+          title="What should Relay follow?"
+          description="Add a subject, a website, or ask your connected agent to set up your sources."
+        />
       )}
     </div>
   );
@@ -252,9 +327,7 @@ function DiscoverySettingsForm({
   return (
     <form
       className="grid gap-5"
-      onSubmit={async (event) => {
-        event.preventDefault();
-        const data = new FormData(event.currentTarget);
+      action={async (data) => {
         const id = await action.run({
           kind: "configure_discovery",
           projectId,
@@ -414,9 +487,7 @@ function MonitorForm({
   return (
     <form
       className="grid gap-5"
-      onSubmit={async (event) => {
-        event.preventDefault();
-        const data = new FormData(event.currentTarget);
+      action={async (data) => {
         const saved = await action.run({
           kind: "save_monitor",
           projectId,
@@ -474,8 +545,6 @@ function MonitorRow({
   monitor: PublicMonitor;
   available: boolean;
 }) {
-  const action = useCommand();
-  const [checkKey] = useState(createRequestKey);
   return (
     <article className="workspace-source-row">
       <Radio size={18} className="mt-1 text-muted-foreground" aria-hidden />
@@ -483,15 +552,7 @@ function MonitorRow({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <h2 className="text-sm font-medium">{m.name}</h2>
           <span className="text-xs text-muted-foreground">
-            {m.paused
-              ? "Paused"
-              : !available
-                ? "Saved"
-                : m.sync === "ready"
-                  ? "Following"
-                  : m.sync === "error"
-                    ? "Reconnecting"
-                    : "Connecting…"}
+            {monitorStatus(m, available)}
           </span>
         </div>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -507,57 +568,78 @@ function MonitorRow({
             automatically.
           </p>
         ) : null}
-        <div className="mt-3 flex flex-wrap items-center gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={
-              action.busy || !available || m.sync !== "ready"
-            }
-            onClick={async () => {
-              await action.run({
-                kind: "monitor_action",
-                monitorId: m._id,
-                action: "check",
-                requestKey: `${checkKey}:${m.lastCheck ?? 0}`,
-              });
-            }}
-          >
-            Check now
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={action.busy}
-            onClick={() =>
-              action.run({
-                kind: "monitor_action",
-                monitorId: m._id,
-                action: m.paused ? "resume" : "pause",
-              })
-            }
-          >
-            {m.paused ? "Resume" : "Pause"}
-          </Button>
-          <MonitorEditor projectId={m.projectId} monitor={m} />
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={action.busy}
-            onClick={() =>
-              action.run({
-                kind: "monitor_action",
-                monitorId: m._id,
-                action: "remove",
-              })
-            }
-          >
-            Unfollow
-          </Button>
-        </div>
-        {action.feedback}
+        <MonitorActions monitor={m} available={available} />
       </div>
     </article>
+  );
+}
+
+function monitorStatus(monitor: PublicMonitor, available: boolean) {
+  if (monitor.paused) return "Paused";
+  if (!available) return "Saved";
+  if (monitor.sync === "ready") return "Following";
+  return monitor.sync === "error" ? "Reconnecting" : "Connecting…";
+}
+
+function MonitorActions({
+  monitor,
+  available,
+}: {
+  monitor: PublicMonitor;
+  available: boolean;
+}) {
+  const action = useCommand();
+  const [checkKey] = useState(createRequestKey);
+  return (
+    <>
+      <div className="mt-3 flex flex-wrap items-center gap-1">
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={action.busy || !available || monitor.sync !== "ready"}
+          onClick={async () => {
+            await action.run({
+              kind: "monitor_action",
+              monitorId: monitor._id,
+              action: "check",
+              requestKey: `${checkKey}:${monitor.lastCheck ?? 0}`,
+            });
+          }}
+        >
+          Check now
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={action.busy}
+          onClick={() =>
+            action.run({
+              kind: "monitor_action",
+              monitorId: monitor._id,
+              action: monitor.paused ? "resume" : "pause",
+            })
+          }
+        >
+          {monitor.paused ? "Resume" : "Pause"}
+        </Button>
+        <MonitorEditor projectId={monitor.projectId} monitor={monitor} />
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={action.busy}
+          onClick={() =>
+            action.run({
+              kind: "monitor_action",
+              monitorId: monitor._id,
+              action: "remove",
+            })
+          }
+        >
+          Unfollow
+        </Button>
+      </div>
+      {action.feedback}
+    </>
   );
 }
 function UpdateCard({
@@ -644,9 +726,7 @@ function UpdateCard({
       {attaching ? (
         <form
           className="flex flex-wrap items-end gap-3"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget);
+          action={async (data) => {
             const id = await action.run({
               kind: "attach_update",
               updateId: u._id,
@@ -807,9 +887,7 @@ function BriefEditor({
   return (
     <form
       className="grid gap-5"
-      onSubmit={async (event) => {
-        event.preventDefault();
-        const data = new FormData(event.currentTarget);
+      action={async (data) => {
         const saved = await action.run({
           kind: "save_brief",
           topicId: t._id,

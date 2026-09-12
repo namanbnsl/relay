@@ -1,6 +1,5 @@
 import { z } from "zod";
 const link = z
-  .string()
   .url()
   .refine((s) => ["http:", "https:"].includes(new URL(s).protocol));
 export const remoteMonitor = z.object({
@@ -64,9 +63,10 @@ export function parseCandidates(run: z.infer<typeof remoteRun>) {
       g.citations.map((c) => c.url),
     ),
   ]);
-  return parsed.candidates
-    .map((c) => ({ ...c, links: c.links.filter((url) => supported.has(url)) }))
-    .filter((c) => c.links.length > 0);
+  return parsed.candidates.flatMap((candidate) => {
+    const links = candidate.links.filter((url) => supported.has(url));
+    return links.length > 0 ? [{ ...candidate, links }] : [];
+  });
 }
 export const outputSchema = {
   type: "object",

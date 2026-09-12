@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
 import { ArrowUpRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,23 +17,31 @@ const runLabels = {
   cancelled: "Research cancelled",
 } satisfies Record<Doc<"researchRuns">["state"]["kind"], string>;
 
+type TopicRunsData = Extract<
+  FunctionReturnType<typeof api.research.read>,
+  { kind: "topic_runs" }
+>;
+type ResearchRun = TopicRunsData["runs"][number];
+
 export function ResearchExecution({ topicId }: { topicId: string }) {
   const data = useQuery(api.research.read, {
     command: { kind: "topic_runs", topicId },
   });
-  const write = useMutation(api.research.write);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [selected, setSelected] = useState<string | null>(null);
   if (!data || data.kind !== "topic_runs")
     return (
       <p role="status" className="my-4 text-xs text-muted-foreground">
         Loading research status…
       </p>
     );
+  return <ResearchExecutionContent data={data} />;
+}
+
+function ResearchExecutionContent({ data }: { data: TopicRunsData }) {
+  const write = useMutation(api.research.write);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [selected, setSelected] = useState<string | null>(null);
   const current = data.runs.find((run) => run._id === selected) ?? data.runs[0];
-  const active =
-    current?.state.kind === "queued" || current?.state.kind === "running";
   const running = data.runs.some(
     (run) => run.state.kind === "queued" || run.state.kind === "running",
   );
@@ -41,9 +50,7 @@ export function ResearchExecution({ topicId }: { topicId: string }) {
     setBusy(true);
     setError("");
     try {
-      if (current) {
-        await write({ command: { kind, runId: current._id } });
-      }
+      if (current) await write({ command: { kind, runId: current._id } });
     } catch {
       setError("Could not complete the request. Please try again.");
     } finally {
@@ -53,20 +60,7 @@ export function ResearchExecution({ topicId }: { topicId: string }) {
   if (!current) return null;
   return (
     <section className="my-4 text-sm" aria-label="Research activity">
-      {running ? (
-        <div
-          role="status"
-          className="flex items-center gap-2 py-2 text-muted-foreground"
-        >
-          <Loader2 size={14} className="motion-safe:animate-spin" aria-hidden />
-          Gathering research and sources…
-        </div>
-      ) : current?.state.kind === "partial" ||
-        current?.state.kind === "failed" ? (
-        <p role="status" className="py-2 text-muted-foreground">
-          {runLabels[current.state.kind]}. Open activity for details.
-        </p>
-      ) : null}
+      <ResearchStatus current={current} running={running} />
       <details className="text-xs text-muted-foreground">
         <summary className="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 focus-visible:outline-2">
           Research activity <ArrowUpRight size={12} aria-hidden />
@@ -76,74 +70,15 @@ export function ResearchExecution({ topicId }: { topicId: string }) {
             Your agent explores sources and saves the research above. You can
             also gather background material here for your agent to use.
           </p>
-          {current ? (
-            <div className="space-y-3">
-              <p>{runLabels[current.state.kind]}</p>
-              {current.cancellation !== "not_requested" ? (
-                <p>Cancellation requested</p>
-              ) : null}
-              <div className="flex flex-wrap gap-2">
-                {current.occupied ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => void act("cancel_run")}
-                  >
-                    Cancel
-                  </Button>
-                ) : null}
-                {!active &&
-                current.state.kind !== "succeeded" &&
-                (current.state.kind !== "cancelled" || current.occupied) ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={
-                      busy ||
-                      current.recoveries >= 3 ||
-                      data.setup.kind !== "ready"
-                    }
-                    onClick={() => void act("retry_run")}
-                  >
-                    Try again
-                  </Button>
-                ) : null}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    setSelected(selected === current._id ? null : current._id)
-                  }
-                  aria-expanded={selected === current._id}
-                >
-                  {selected === current._id ? "Hide results" : "View results"}
-                </Button>
-              </div>
-              <p className="leading-6">
-                Background results still need your agent’s assessment.
-              </p>
-            </div>
-          ) : null}
-          {data.runs.length > 1 ? (
-            <details>
-              <summary className="min-h-9 cursor-pointer py-2">
-                Previous investigations
-              </summary>
-              <ul className="space-y-2">
-                {data.runs.map((run) => (
-                  <li key={run._id}>
-                    <button
-                      className="min-h-9 text-left underline underline-offset-4"
-                      onClick={() => setSelected(run._id)}
-                    >
-                      {run.question} · {runLabels[run.state.kind]}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          ) : null}
+          <CurrentRun
+            current={current}
+            busy={busy}
+            setupReady={data.setup.kind === "ready"}
+            selected={selected}
+            onAct={act}
+            onSelect={setSelected}
+          />
+          <PreviousRuns runs={data.runs} onSelect={setSelected} />
           {selected ? <Packet runId={selected} /> : null}
         </div>
       </details>
@@ -153,6 +88,126 @@ export function ResearchExecution({ topicId }: { topicId: string }) {
         </p>
       ) : null}
     </section>
+  );
+}
+
+function ResearchStatus({
+  current,
+  running,
+}: {
+  current: ResearchRun;
+  running: boolean;
+}) {
+  if (running)
+    return (
+      <div
+        role="status"
+        className="flex items-center gap-2 py-2 text-muted-foreground"
+      >
+        <Loader2 size={14} className="motion-safe:animate-spin" aria-hidden />
+        Gathering research and sources…
+      </div>
+    );
+  if (current.state.kind !== "partial" && current.state.kind !== "failed")
+    return null;
+  return (
+    <p role="status" className="py-2 text-muted-foreground">
+      {runLabels[current.state.kind]}. Open activity for details.
+    </p>
+  );
+}
+
+function CurrentRun({
+  current,
+  busy,
+  setupReady,
+  selected,
+  onAct,
+  onSelect,
+}: {
+  current: ResearchRun;
+  busy: boolean;
+  setupReady: boolean;
+  selected: string | null;
+  onAct: (kind: "cancel_run" | "retry_run") => Promise<void>;
+  onSelect: (runId: string | null) => void;
+}) {
+  const active =
+    current.state.kind === "queued" || current.state.kind === "running";
+  const canRetry =
+    !active &&
+    current.state.kind !== "succeeded" &&
+    (current.state.kind !== "cancelled" || current.occupied);
+  const expanded = selected === current._id;
+  return (
+    <div className="space-y-3">
+      <p>{runLabels[current.state.kind]}</p>
+      {current.cancellation !== "not_requested" ? (
+        <p>Cancellation requested</p>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        {current.occupied ? (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void onAct("cancel_run")}
+          >
+            Cancel
+          </Button>
+        ) : null}
+        {canRetry ? (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy || current.recoveries >= 3 || !setupReady}
+            onClick={() => void onAct("retry_run")}
+          >
+            Try again
+          </Button>
+        ) : null}
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => onSelect(expanded ? null : current._id)}
+          aria-expanded={expanded}
+        >
+          {expanded ? "Hide results" : "View results"}
+        </Button>
+      </div>
+      <p className="leading-6">
+        Background results still need your agent’s assessment.
+      </p>
+    </div>
+  );
+}
+
+function PreviousRuns({
+  runs,
+  onSelect,
+}: {
+  runs: ResearchRun[];
+  onSelect: (runId: string) => void;
+}) {
+  if (runs.length <= 1) return null;
+  return (
+    <details>
+      <summary className="min-h-9 cursor-pointer py-2">
+        Previous investigations
+      </summary>
+      <ul className="space-y-2">
+        {runs.map((run) => (
+          <li key={run._id}>
+            <button
+              className="min-h-9 text-left underline underline-offset-4"
+              onClick={() => onSelect(run._id)}
+            >
+              {run.question} · {runLabels[run.state.kind]}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 function Packet({ runId }: { runId: string }) {
