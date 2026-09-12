@@ -77,28 +77,104 @@ export const saveSearch = internalMutation({
     return sources;
   },
 });
-export const saveEvidence = internalMutation({
+export const claimRetrieval = internalMutation({
   args: {
     subject: v.string(),
     sourceId: v.id("workspaceSources"),
-    url: v.string(),
-    title: v.string(),
-    content: v.string(),
-    reportedDollars: v.optional(v.number()),
   },
-  returns: workspaceEvidenceDoc,
-  handler: async (ctx, { subject, ...args }) => {
-    const source = await ctx.db.get(args.sourceId);
+  returns: v.union(
+    v.object({ kind: v.literal("claimed") }),
+    v.object({ kind: v.literal("cached"), evidence: workspaceEvidenceDoc }),
+    v.object({ kind: v.literal("blocked"), reason: v.string() }),
+  ),
+  handler: async (ctx, { subject, sourceId }) => {
+    const source = await ctx.db.get(sourceId);
     if (!source) throw new ConvexError("Source not found.");
     await topicFor(ctx, subject, source.topicId);
-    // Immutable snapshots: concurrent retrievals can each retain their reported cost.
+    const evidence = await ctx.db
+      .query("workspaceEvidence")
+      .withIndex("by_source", (q) => q.eq("sourceId", sourceId))
+      .first();
+    if (evidence) return { kind: "cached" as const, evidence };
+    const receipt = await ctx.db
+      .query("workspaceSourceRetrievals")
+      .withIndex("by_source", (q) => q.eq("sourceId", sourceId))
+      .unique();
+    if (receipt)
+      return {
+        kind: "blocked" as const,
+        reason:
+          receipt.state.kind === "failed"
+            ? receipt.state.reason
+            : "retrieval_in_progress",
+      };
+    await ctx.db.insert("workspaceSourceRetrievals", {
+      sourceId,
+      state: { kind: "pending", startedAt: Date.now() },
+    });
+    return { kind: "claimed" as const };
+  },
+});
+
+export const finishRetrieval = internalMutation({
+  args: {
+    subject: v.string(),
+    sourceId: v.id("workspaceSources"),
+    outcome: v.union(
+      v.object({
+        kind: v.literal("retrieved"),
+        url: v.string(),
+        title: v.string(),
+        content: v.string(),
+      }),
+      v.object({ kind: v.literal("failed"), reason: v.string() }),
+    ),
+    reportedDollars: v.optional(v.number()),
+  },
+  returns: v.union(workspaceEvidenceDoc, v.null()),
+  handler: async (ctx, { subject, sourceId, outcome, reportedDollars }) => {
+    const source = await ctx.db.get(sourceId);
+    if (!source) throw new ConvexError("Source not found.");
+    await topicFor(ctx, subject, source.topicId);
+    const receipt = await ctx.db
+      .query("workspaceSourceRetrievals")
+      .withIndex("by_source", (q) => q.eq("sourceId", sourceId))
+      .unique();
+    if (!receipt || receipt.state.kind !== "pending")
+      throw new Error("Source retrieval was not claimed");
+    await ctx.db.patch(sourceId, {
+      retrievalAttempts: (source.retrievalAttempts ?? 0) + 1,
+      ...(reportedDollars === undefined
+        ? {}
+        : {
+            retrievalDollars:
+              (source.retrievalDollars ?? 0) + reportedDollars,
+          }),
+    });
+    if (outcome.kind === "failed") {
+      await ctx.db.patch(receipt._id, {
+        state: {
+          kind: "failed",
+          completedAt: Date.now(),
+          reason: outcome.reason,
+        },
+      });
+      return null;
+    }
     const id = await ctx.db.insert("workspaceEvidence", {
-      ...args,
+      sourceId,
       topicId: source.topicId,
+      url: outcome.url,
+      title: outcome.title,
+      content: outcome.content,
       retrievedAt: Date.now(),
+      ...(reportedDollars === undefined ? {} : { reportedDollars }),
     });
     const row = await ctx.db.get(id);
     if (!row) throw new Error("Evidence insert failed");
+    await ctx.db.patch(receipt._id, {
+      state: { kind: "retrieved", evidenceId: row._id },
+    });
     return row;
   },
 });
@@ -177,30 +253,5 @@ export const available = query({
           : [],
       ),
     ];
-  },
-});
-
-// Record reported charges even when the response contains no usable page content.
-export const recordRetrieval = internalMutation({
-  args: {
-    subject: v.string(),
-    sourceId: v.id("workspaceSources"),
-    reportedDollars: v.optional(v.number()),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const source = await ctx.db.get(args.sourceId);
-    if (!source) throw new ConvexError("Source not found.");
-    await topicFor(ctx, args.subject, source.topicId);
-    await ctx.db.patch(source._id, {
-      retrievalAttempts: (source.retrievalAttempts ?? 0) + 1,
-      ...(args.reportedDollars === undefined
-        ? {}
-        : {
-            retrievalDollars:
-              (source.retrievalDollars ?? 0) + args.reportedDollars,
-          }),
-    });
-    return null;
   },
 });

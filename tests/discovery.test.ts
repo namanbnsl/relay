@@ -997,6 +997,38 @@ describe("chosen discovery and research times", () => {
       (await owner.query(api.discovery.read, { projectId })).investigations,
     ).toHaveLength(0);
     vi.setSystemTime(frequency.at);
+    const occupiedRunId = await t.run(async (ctx) => {
+      const topic = await ctx.db.get(state.topic._id);
+      if (!topic) throw new Error("Topic missing");
+      return ctx.db.insert("researchRuns", {
+        owner: "user_owner",
+        projectId: topic.projectId,
+        topicId: topic._id,
+        requestKey: "occupied-run",
+        question: topic.question,
+        brief: topic.question,
+        state: { kind: "running" },
+        submission: { kind: "accepted", remoteId: "provider-run" },
+        stage: "Researching",
+        updatedAt: Date.now(),
+        deadline: Date.now() + 60000,
+        attempts: 1,
+        recoveries: 0,
+        provider: "exa",
+        effort: "medium",
+        occupied: true,
+        cancellation: "not_requested",
+        pollCount: 0,
+      });
+    });
+    await t.mutation(internal.schedules.cycle, args);
+    expect(
+      (await t.run((ctx) => ctx.db.get(state.topic._id)))?.nextResearchAt,
+    ).toBe(frequency.at);
+    expect(
+      (await owner.query(api.discovery.read, { projectId })).investigations,
+    ).toHaveLength(0);
+    await t.run((ctx) => ctx.db.patch(occupiedRunId, { occupied: false }));
     await t.mutation(internal.schedules.cycle, args);
     await t.mutation(internal.schedules.cycle, args);
     expect(

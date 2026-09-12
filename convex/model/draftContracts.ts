@@ -127,6 +127,18 @@ export const workspaceEvidenceDoc = v.object({
   _creationTime: v.number(),
   ...workspaceEvidenceFields,
 });
+export const sourceRetrievalState = v.union(
+  v.object({ kind: v.literal("pending"), startedAt: v.number() }),
+  v.object({
+    kind: v.literal("failed"),
+    completedAt: v.number(),
+    reason: v.string(),
+  }),
+  v.object({
+    kind: v.literal("retrieved"),
+    evidenceId: v.id("workspaceEvidence"),
+  }),
+);
 const domains = z
   .array(
     z

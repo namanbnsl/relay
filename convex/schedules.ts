@@ -49,8 +49,8 @@ export const cycle = internalMutation({
       t.frequency.kind === "daily"
         ? nextStart(Date.now(), t.frequency.time, t.frequency.timezone)
         : undefined;
-    await ctx.db.patch(t._id, { nextResearchAt: next });
     if (next !== undefined) {
+      await ctx.db.patch(t._id, { nextResearchAt: next });
       await ctx.scheduler.runAt(next, internal.schedules.cycle, {
         topicId: t._id,
         generation: a.generation,
@@ -63,7 +63,11 @@ export const cycle = internalMutation({
         q.eq("topicId", t._id).eq("generation", a.generation).eq("due", a.due),
       )
       .unique();
-    if (receipt) return;
+    if (receipt) {
+      if (t.frequency.kind === "scheduled")
+        await ctx.db.patch(t._id, { nextResearchAt: undefined });
+      return;
+    }
     const pending = await ctx.db
       .query("investigations")
       .withIndex("by_topic", (q) => q.eq("topicId", t._id))
@@ -105,6 +109,8 @@ export const cycle = internalMutation({
         ...base,
         state: { kind: "unavailable", reason: config.reason },
       });
+      if (t.frequency.kind === "scheduled")
+        await ctx.db.patch(t._id, { nextResearchAt: undefined });
       return;
     }
     const run = await writeOwned(ctx, project.owner, {
@@ -122,5 +128,7 @@ export const cycle = internalMutation({
       ...base,
       state: { kind: "provider", runId: run._id },
     });
+    if (t.frequency.kind === "scheduled")
+      await ctx.db.patch(t._id, { nextResearchAt: undefined });
   },
 });

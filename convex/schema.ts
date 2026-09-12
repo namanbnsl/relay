@@ -17,6 +17,7 @@ import {
 import {
   draftFields,
   sourceFields,
+  sourceRetrievalState,
   workspaceEvidenceFields,
 } from "./model/draftContracts";
 import { candidate, investigationState } from "./model/discoveryContracts";
@@ -114,6 +115,10 @@ export default defineSchema({
     reportedDollars: v.optional(v.number()),
   }).index("by_topic", ["topicId"]),
   workspaceSources: defineTable(sourceFields).index("by_topic", ["topicId"]),
+  workspaceSourceRetrievals: defineTable({
+    sourceId: v.id("workspaceSources"),
+    state: sourceRetrievalState,
+  }).index("by_source", ["sourceId"]),
   workspaceEvidence: defineTable(workspaceEvidenceFields)
     .index("by_source", ["sourceId"])
     .index("by_topic", ["topicId"]),

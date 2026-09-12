@@ -653,6 +653,87 @@ it("compares search date bounds chronologically across timestamp precision", asy
   ).rejects.toThrow("Invalid search");
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
+it("claims source retrieval before the paid request", async () => {
+  const { t, topicId } = await setup();
+  let releaseContents: (() => void) | undefined;
+  const contentsStarted = new Promise<void>((resolve) => {
+    releaseContents = resolve;
+  });
+  let allowContents: (() => void) | undefined;
+  const contentsGate = new Promise<void>((resolve) => {
+    allowContents = resolve;
+  });
+  const mock = vi.fn(async (url: string) => {
+    if (url.endsWith("/search"))
+      return new Response(
+        JSON.stringify({
+          results: [{ url: "https://example.org/source", highlights: [] }],
+        }),
+      );
+    releaseContents?.();
+    await contentsGate;
+    return new Response(
+      JSON.stringify({
+        results: [
+          { url: "https://example.org/source", text: "Retrieved once" },
+        ],
+        costDollars: { total: 0.001 },
+      }),
+    );
+  });
+  vi.stubGlobal("fetch", mock);
+  const search = await t.action(api.mcp.sources, {
+    token: "owner",
+    command: { kind: "search_sources", topicId, query: "x" },
+  });
+  if (search.kind !== "search_excerpts") throw new Error("Wrong search");
+  const command = {
+    kind: "read_sources" as const,
+    topicId,
+    sourceIds: [search.sources[0]._id],
+  };
+  const first = t.action(api.mcp.sources, { token: "owner", command });
+  await contentsStarted;
+  const overlapping = await t.action(api.mcp.sources, {
+    token: "owner",
+    command,
+  });
+  expect(overlapping).toMatchObject({
+    kind: "retrieved_content",
+    evidence: [],
+    failures: [{ reason: "retrieval_in_progress" }],
+  });
+  expect(
+    mock.mock.calls.filter(([url]) => url.endsWith("/contents")),
+  ).toHaveLength(1);
+  allowContents?.();
+  const completed = await first;
+  expect(
+    completed.kind === "retrieved_content" && completed.evidence,
+  ).toHaveLength(1);
+  const retried = await t.action(api.mcp.sources, {
+    token: "owner",
+    command,
+  });
+  expect(retried).toMatchObject({
+    kind: "retrieved_content",
+    evidence: [{ content: "Retrieved once" }],
+    failures: [],
+  });
+  expect(
+    mock.mock.calls.filter(([url]) => url.endsWith("/contents")),
+  ).toHaveLength(1);
+  const evidence = await t.run((ctx) =>
+    ctx.db
+      .query("workspaceEvidence")
+      .withIndex("by_source", (q) => q.eq("sourceId", search.sources[0]._id))
+      .collect(),
+  );
+  expect(evidence).toHaveLength(1);
+  const source = await t.run((ctx) => ctx.db.get(search.sources[0]._id));
+  expect(source?.retrievalAttempts).toBe(1);
+  expect(source?.retrievalDollars).toBe(0.001);
+});
 it("records known retrieval charges on empty content, rejects malformed provider data, and honors the execution switch", async () => {
   const { t, topicId } = await setup();
   const mock = vi.fn(

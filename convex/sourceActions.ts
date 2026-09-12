@@ -66,44 +66,67 @@ export const execute = internalAction({
     // At most five independent, timeout-bounded requests; no automatic paid retries.
     const retrieved = await Promise.all(
       missing.map(async (source) => {
-        try {
-          const response = await getContents(source.url);
-          await ctx.runMutation(internal.sources.recordRetrieval, {
-            subject,
-            sourceId: source._id,
-            ...(response.costDollars
-              ? { reportedDollars: response.costDollars.total }
-              : {}),
-          });
-          // A single requested URL may resolve to a canonical URL. Keep both via sourceId.
-          const page =
-            response.results.find((r) => r.url === source.url) ??
-            (response.results.length === 1 ? response.results[0] : undefined);
-          if (!page?.text?.trim())
-            throw new ConvexError(
-              "Provider returned no matching page content.",
-            );
-          const evidence = await ctx.runMutation(
-            internal.sources.saveEvidence,
-            {
-              subject,
-              sourceId: source._id,
-              url: page.url,
-              title: page.title ?? source.title,
-              content: page.text,
-              ...(response.costDollars
-                ? { reportedDollars: response.costDollars.total }
-                : {}),
-            },
-          );
-          return { kind: "retrieved" as const, evidence };
-        } catch (error) {
+        const claim = await ctx.runMutation(internal.sources.claimRetrieval, {
+          subject,
+          sourceId: source._id,
+        });
+        if (claim.kind === "cached")
+          return { kind: "retrieved" as const, evidence: claim.evidence };
+        if (claim.kind === "blocked")
           return {
             kind: "failed" as const,
             sourceId: source._id,
-            reason: providerError(error),
+            reason: claim.reason,
+          };
+        let response: Awaited<ReturnType<typeof getContents>>;
+        try {
+          response = await getContents(source.url);
+        } catch (error) {
+          const reason = providerError(error);
+          await ctx.runMutation(internal.sources.finishRetrieval, {
+            subject,
+            sourceId: source._id,
+            outcome: { kind: "failed", reason },
+          });
+          return {
+            kind: "failed" as const,
+            sourceId: source._id,
+            reason,
           };
         }
+        const reportedDollars = response.costDollars?.total;
+        // A single requested URL may resolve to a canonical URL. Keep both via sourceId.
+        const page =
+          response.results.find((r) => r.url === source.url) ??
+          (response.results.length === 1 ? response.results[0] : undefined);
+        if (!page?.text?.trim()) {
+          const reason = providerError(
+            new ConvexError("Provider returned no matching page content."),
+          );
+          await ctx.runMutation(internal.sources.finishRetrieval, {
+            subject,
+            sourceId: source._id,
+            outcome: { kind: "failed", reason },
+            ...(reportedDollars === undefined ? {} : { reportedDollars }),
+          });
+          return { kind: "failed" as const, sourceId: source._id, reason };
+        }
+        const evidence = await ctx.runMutation(
+          internal.sources.finishRetrieval,
+          {
+            subject,
+            sourceId: source._id,
+            outcome: {
+              kind: "retrieved",
+              url: page.url,
+              title: page.title ?? source.title,
+              content: page.text,
+            },
+            ...(reportedDollars === undefined ? {} : { reportedDollars }),
+          },
+        );
+        if (!evidence) throw new Error("Evidence retrieval was not saved");
+        return { kind: "retrieved" as const, evidence };
       }),
     );
     return {
