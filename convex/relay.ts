@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import {
   query,
@@ -6,7 +7,7 @@ import {
   internalMutation,
 } from "./_generated/server";
 import { requireIdentity } from "./model/auth";
-import { readWorkflow, writeWorkflow } from "./model/workflow";
+import { readWorkflow, writeWorkflow, topicFor } from "./model/workflow";
 import {
   readCommand,
   readResult,
@@ -46,4 +47,30 @@ export const writeFromMcp = internalMutation({
   returns: writeResult,
   handler: async (ctx, { subject, command }) =>
     writeWorkflow(ctx, { subject, channel: "mcp" }, command),
+});
+
+export const history = query({
+  args: {
+    topicId: v.string(),
+    kind: v.union(v.literal("research"), v.literal("script")),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, { topicId, kind, paginationOpts }) => {
+    const topic = await topicFor(
+      ctx,
+      (await requireIdentity(ctx)).subject,
+      topicId,
+    );
+    return kind === "research"
+      ? ctx.db
+          .query("researchVersions")
+          .withIndex("by_topic", (q) => q.eq("topicId", topic._id))
+          .order("desc")
+          .paginate(paginationOpts)
+      : ctx.db
+          .query("scriptVersions")
+          .withIndex("by_topic", (q) => q.eq("topicId", topic._id))
+          .order("desc")
+          .paginate(paginationOpts);
+  },
 });

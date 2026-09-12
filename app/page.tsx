@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
 
-const stages = ["Monitor", "Research", "Approve", "Publish"] as const;
+const stages = ["Research", "Review", "Draft", "Approve"] as const;
 
 export default async function Home() {
   const { userId } = await auth();
@@ -36,10 +36,7 @@ export default async function Home() {
             </SignInButton>
           </Show>
           <Show when="signed-in">
-            <Link
-              className={buttonVariants({ size: "sm" })}
-              href="/projects"
-            >
+            <Link className={buttonVariants({ size: "sm" })} href="/projects">
               Open workspace
             </Link>
           </Show>
@@ -58,8 +55,8 @@ export default async function Home() {
             Evidence first. Every handoff stays clear.
           </h1>
           <p className="mt-6 max-w-[610px] text-base leading-7 text-muted-foreground text-pretty sm:text-lg sm:leading-8">
-            Relay keeps research, approvals, and production connected to the
-            exact sources your team trusts.
+            Keep your research, sources, and scripts together. Work with your
+            agent and review each draft in one place.
           </p>
 
           <div className="mt-8">
@@ -72,10 +69,7 @@ export default async function Home() {
               </SignInButton>
             </Show>
             <Show when="signed-in">
-              <Link
-                className={buttonVariants({ size: "lg" })}
-                href="/projects"
-              >
+              <Link className={buttonVariants({ size: "lg" })} href="/projects">
                 Open your projects
                 <ArrowRight strokeWidth={1.8} aria-hidden="true" />
               </Link>

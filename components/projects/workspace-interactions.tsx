@@ -6,6 +6,7 @@ import {
   useState,
   type ReactElement,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { Check, Copy, X, ArrowUpRight, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,9 +39,20 @@ export function useDraftProtection(dirty: boolean) {
         event.stopPropagation();
       }
     };
+    const originalUrl = window.location.href;
+    const beforeHistoryNavigation = (event: PopStateEvent) => {
+      if (
+        !window.confirm("Discard your unsaved changes and leave this document?")
+      ) {
+        event.stopImmediatePropagation();
+        window.history.pushState(null, "", originalUrl);
+      }
+    };
+    window.addEventListener("popstate", beforeHistoryNavigation, true);
     window.addEventListener("beforeunload", beforeUnload);
     document.addEventListener("click", beforeNavigate, true);
     return () => {
+      window.removeEventListener("popstate", beforeHistoryNavigation, true);
       window.removeEventListener("beforeunload", beforeUnload);
       document.removeEventListener("click", beforeNavigate, true);
     };
@@ -54,6 +66,7 @@ export function WorkspaceDialog({
   children,
   open,
   onOpenChange,
+  returnFocusRef,
 }: {
   title: string;
   description: string;
@@ -61,8 +74,10 @@ export function WorkspaceDialog({
   children: ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const returnFocus = useRef<HTMLElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   return (
     <Dialog
       open={open}
@@ -77,43 +92,56 @@ export function WorkspaceDialog({
       }}
     >
       <DialogTrigger render={trigger} />
-        <DialogContent
-          showCloseButton={false}
-          className="workspace-dialog research-workspace"
-          initialFocus={() =>
-            document.querySelector<HTMLElement>(
-              ".workspace-dialog input, .workspace-dialog textarea",
-            )
-          }
-          finalFocus={() =>
-            returnFocus.current?.isConnected ? returnFocus.current : null
-          }
-        >
-          <div className="pe-8">
-            <DialogTitle className="text-lg font-semibold tracking-tight">
-              {title}
-            </DialogTitle>
-            <DialogDescription className="mt-2 text-sm leading-6 text-muted-foreground">
-              {description}
-            </DialogDescription>
-          </div>
-          <DialogClose
-            render={<Button
+      <DialogContent
+        ref={contentRef}
+        showCloseButton={false}
+        className="workspace-dialog research-workspace"
+        initialFocus={() =>
+          contentRef.current?.querySelector<HTMLElement>(
+            "input:not(:disabled), select:not(:disabled), textarea:not(:disabled)",
+          ) ?? null
+        }
+        finalFocus={() =>
+          returnFocusRef?.current?.isConnected
+            ? returnFocusRef.current
+            : returnFocus.current?.isConnected
+              ? returnFocus.current
+              : null
+        }
+      >
+        <div className="pe-8">
+          <DialogTitle className="text-lg font-semibold tracking-tight">
+            {title}
+          </DialogTitle>
+          <DialogDescription className="mt-2 text-sm leading-6 text-muted-foreground">
+            {description}
+          </DialogDescription>
+        </div>
+        <DialogClose
+          render={
+            <Button
               variant="ghost"
               size="icon"
               className="absolute end-4 top-4"
               aria-label="Close dialog"
-            />}
-          >
-              <X aria-hidden />
-          </DialogClose>
-          <div className="mt-6">{children}</div>
-        </DialogContent>
+            />
+          }
+        >
+          <X aria-hidden />
+        </DialogClose>
+        <div className="mt-6">{children}</div>
+      </DialogContent>
     </Dialog>
   );
 }
 
-export function AgentPrompt({ prompt }: { prompt: string }) {
+export function AgentPrompt({
+  prompt,
+  label = "Continue with my agent",
+}: {
+  prompt: string;
+  label?: string;
+}) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   return (
@@ -123,7 +151,7 @@ export function AgentPrompt({ prompt }: { prompt: string }) {
       trigger={
         <Button variant="outline">
           <ArrowUpRight aria-hidden />
-          Continue with agent
+          {label}
         </Button>
       }
     >

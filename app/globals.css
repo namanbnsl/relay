@@ -201,7 +201,6 @@
   gap: 24px;
   padding: 22px 14px 18px;
   background: var(--sidebar);
-  border-inline-end: 1px solid var(--border);
 }
 .workspace-brand {
   display: flex;
@@ -225,7 +224,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  min-height: 36px;
+  min-height: 40px;
   padding: 7px 9px;
   border-radius: 6px;
   font-size: 13px;
@@ -242,7 +241,7 @@
   flex-shrink: 0;
   width: 19px;
   height: 19px;
-  border: 1px solid var(--border-strong);
+  background: var(--secondary);
   border-radius: 4px;
   font-size: 10px;
   font-weight: 550;
@@ -253,7 +252,6 @@
   gap: 10px;
   min-height: 56px;
   padding: 12px 28px;
-  border-bottom: 1px solid var(--border);
   font-size: 12px;
 }
 .workspace-main {
@@ -297,7 +295,6 @@
   height: 38px;
   flex-shrink: 0;
   background: var(--surface-subtle);
-  border: 1px solid var(--border);
   border-radius: 9px;
   color: var(--muted-foreground);
 }
@@ -311,7 +308,6 @@
   width: 48px;
   height: 48px;
   margin: 0 auto 22px;
-  border: 1px solid var(--border);
   border-radius: 12px;
   color: var(--muted-foreground);
   box-shadow: 0 2px 5px #00000005;
@@ -405,6 +401,8 @@
 @media (max-width: 760px) {
   .workspace-shell {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    align-content: start;
   }
   .workspace-sidebar {
     position: static;
@@ -416,18 +414,24 @@
     align-items: center;
     justify-content: space-between;
   }
+  .workspace-sidebar > .workspace-nav-item {
+    display: none;
+  }
   .workspace-sidebar nav {
     display: none;
   }
-  .workspace-sidebar > div:last-child {
+  .workspace-sidebar:has(details[open]) {
+    align-items: flex-start;
+  }
+  .workspace-account {
     border: 0;
     padding: 0;
     margin: 0;
   }
-  .workspace-sidebar > div:last-child span {
+  .workspace-account-label {
     display: none;
   }
-  .workspace-brand > span:last-child {
+  .workspace-sidebar .workspace-brand > span:last-child {
     display: none;
   }
   .workspace-topbar {
@@ -444,6 +448,304 @@
   }
   .workspace-dialog input,
   .workspace-dialog textarea {
+    font-size: 16px;
+  }
+}
+
+/* Shared product surfaces and public narrative. */
+.skip-link {
+  position: fixed;
+  top: 12px;
+  left: 16px;
+  z-index: 100;
+  transform: translateY(-180%);
+  padding: 12px 18px;
+  background: var(--primary);
+  color: white;
+  border-radius: 8px;
+}
+.skip-link:focus {
+  transform: none;
+}
+:where(a, button, summary, select):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+}
+.workspace-mark {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.workspace-sidebar nav {
+  overflow-y: auto;
+  min-height: 0;
+}
+.workspace-account button {
+  min-width: 32px;
+  min-height: 32px;
+}
+.workspace-nav-item[aria-current] {
+  color: var(--primary);
+  background: var(--sidebar-accent);
+}
+.workspace-review {
+  padding: 18px 0;
+}
+.workspace-document textarea {
+  min-height: 120px;
+  line-height: 1.8;
+  resize: vertical;
+}
+.workspace-document-nav {
+  flex-wrap: wrap;
+}
+.workspace-document-nav nav button[aria-pressed="true"] {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+.workspace-list-row {
+  border-radius: 0;
+  min-height: 88px;
+}
+.workspace-list-row:focus-visible {
+  border-radius: 6px;
+  outline-offset: -2px;
+}
+.workspace-list-icon {
+  color: var(--primary);
+  background: var(--sidebar);
+}
+.workspace-search {
+  min-height: 40px;
+}
+.workspace-search input {
+  min-height: 40px;
+  background: var(--card);
+}
+.workspace-checkbox {
+  min-height: 40px;
+}
+.workspace-empty {
+  margin-top: 20px;
+}
+.workspace-dialog form {
+  min-width: 0;
+}
+.workspace-dialog select {
+  min-height: 40px;
+}
+@media (pointer: coarse) {
+  [data-slot="button"],
+  .workspace-nav-item,
+  .workspace-brief summary {
+    min-height: 44px;
+  }
+  [data-slot="button"][aria-label] {
+    min-width: 44px;
+  }
+  .workspace-account button,
+  .workspace-checkbox {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+@media (max-width: 760px) {
+  .workspace-document {
+    padding-top: 24px;
+  }
+  .workspace-document input,
+  .workspace-document textarea,
+  .workspace-document select {
+    font-size: 16px;
+  }
+  .workspace-search {
+    max-width: 100%;
+  }
+}
+
+/* A quiet reading surface: hierarchy comes from space and typography. */
+.workspace-main {
+  max-width: 1040px;
+}
+.workspace-destinations {
+  display: flex;
+  gap: 28px;
+  margin-bottom: 44px;
+  font-size: 13px;
+}
+.workspace-destination {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  color: var(--muted-foreground);
+}
+.workspace-destination[aria-current] {
+  color: var(--foreground);
+  font-weight: 600;
+  box-shadow: inset 0 -2px var(--foreground);
+}
+.workspace-heading-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+.workspace-eyebrow {
+  margin-bottom: 10px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+.workspace-schedule-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+.workspace-schedule-line svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.workspace-view-switch {
+  display: flex;
+  gap: 24px;
+}
+.workspace-view-switch button {
+  min-height: 44px;
+  font-size: 13px;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+.workspace-view-switch button[aria-pressed="true"] {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.workspace-view-switch span {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted-foreground);
+}
+.workspace-feed {
+  margin-top: 8px;
+}
+.workspace-update {
+  padding: 32px 0;
+  max-width: 740px;
+}
+.workspace-update + .workspace-update {
+  border-top: 1px solid var(--border);
+}
+.workspace-update h2 {
+  max-width: 600px;
+  font-size: 20px;
+  line-height: 1.5;
+  letter-spacing: -0.025em;
+}
+.workspace-update > * + * {
+  margin-top: 14px;
+}
+.workspace-source-row {
+  display: flex;
+  gap: 16px;
+  padding: 24px 0;
+}
+.workspace-source-row + .workspace-source-row {
+  border-top: 1px solid var(--border);
+}
+.workspace-disclosure {
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+.workspace-disclosure > summary {
+  cursor: pointer;
+  min-height: 36px;
+  padding: 8px 0;
+}
+.workspace-topic-brief {
+  padding-top: 32px;
+}
+.workspace-brief-details {
+  display: grid;
+  gap: 20px;
+  max-width: 680px;
+  font-size: 14px;
+  line-height: 1.9;
+}
+.workspace-brief-details dt {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.workspace-brief-details dd {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.workspace-next-step {
+  padding-top: 38px;
+  margin-top: 32px;
+  border-top: 1px solid var(--border);
+}
+.workspace-step-number {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 10px;
+  background: var(--secondary);
+}
+.workspace-document-nav button[aria-pressed="true"] .workspace-step-number {
+  background: var(--foreground);
+  color: var(--background);
+}
+.workspace-dialog input,
+.workspace-dialog textarea,
+.workspace-dialog select {
+  width: 100%;
+  min-width: 0;
+}
+.workspace-dialog textarea {
+  resize: vertical;
+}
+.workspace-dialog [role="status"]:empty {
+  display: none;
+}
+.workspace-topic-brief [role="status"]:empty,
+.workspace-source-row [role="status"]:empty {
+  display: none;
+}
+@media (max-width: 760px) {
+  .workspace-main {
+    padding-top: 20px;
+    padding-bottom: 64px;
+  }
+  .workspace-destinations {
+    margin-bottom: 30px;
+  }
+  .workspace-update {
+    padding: 24px 0;
+  }
+  .workspace-update h2 {
+    font-size: 18px;
+  }
+  .workspace-document-nav nav {
+    flex: 1;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .workspace-document-nav nav button {
+    font-size: 13px;
+  }
+  .workspace-schedule-line {
+    font-size: 12px;
+  }
+  .workspace-dialog input,
+  .workspace-dialog textarea,
+  .workspace-dialog select {
     font-size: 16px;
   }
 }

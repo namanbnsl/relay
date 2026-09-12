@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 export const workspacePageClass =
   "mx-auto w-full max-w-[1040px] px-5 py-8 sm:px-10 sm:py-10 lg:px-12";
 export const workspaceSelectClass =
-  "min-h-9 min-w-0 max-w-full rounded-md border border-border-strong bg-background px-2.5 text-base outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 focus-visible:ring-offset-0 sm:text-[13px]";
+  "min-h-10 min-w-0 max-w-full rounded-md border border-border-strong bg-background px-2.5 text-base outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 focus-visible:ring-offset-0 sm:text-[13px]";
 
 export function WorkspaceHeading({
   title,
@@ -28,26 +28,5 @@ export function WorkspaceHeading({
       </div>
       {action}
     </div>
-  );
-}
-
-export function ViewButton({
-  active,
-  children,
-  onClick,
-}: {
-  active: boolean;
-  children: ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={`relative min-h-10 min-w-6 shrink-0 border-b-2 px-0.5 text-[13px] font-medium outline-none transition-colors duration-150 focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${active ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-    >
-      {children}
-    </button>
   );
 }

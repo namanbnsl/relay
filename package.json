@@ -9,13 +9,16 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "doctor": "npx react-doctor@latest"
+    "doctor": "npx react-doctor@latest",
+    "test": "vitest run"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
     "@clerk/backend": "^3.17.1",
     "@clerk/mcp-tools": "^0.6.0",
     "@clerk/nextjs": "^7.8.4",
+    "@convex-dev/workflow": "^0.4.6",
+    "@convex-dev/workpool": "^0.4.11",
     "@modelcontextprotocol/server": "^2.0.0",
     "@vercel/analytics": "^2.0.1",
     "class-variance-authority": "^0.7.1",
@@ -31,14 +34,16 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
     "@tailwindcss/postcss": "^4.3.3",
-    "@types/node": "^26.4.0",
+    "@types/node": "^22.20.2",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "convex-test": "^0.0.56",
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.3.4",
     "tailwindcss": "^4.3.3",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.18"
   }
 }
